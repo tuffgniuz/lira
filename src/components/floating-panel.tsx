@@ -23,6 +23,8 @@ export function FloatingPanel({
       return;
     }
 
+    const currentPanel = panel;
+
     const focusableSelectors = [
       'a[href]',
       'button:not([disabled])',
@@ -33,7 +35,7 @@ export function FloatingPanel({
     ].join(", ");
 
     const getFocusableElements = () =>
-      Array.from(panel.querySelectorAll<HTMLElement>(focusableSelectors)).filter(
+      Array.from(currentPanel.querySelectorAll<HTMLElement>(focusableSelectors)).filter(
         (element) => !element.hasAttribute("disabled") && element.tabIndex !== -1,
       );
 
@@ -41,6 +43,12 @@ export function FloatingPanel({
     focusableElements[0]?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
       if (event.key !== "Tab") {
         return;
       }
@@ -57,7 +65,7 @@ export function FloatingPanel({
       const activeElement = document.activeElement;
 
       if (event.shiftKey) {
-        if (activeElement === firstElement || !panel.contains(activeElement)) {
+        if (activeElement === firstElement || !currentPanel.contains(activeElement)) {
           event.preventDefault();
           lastElement.focus();
         }
@@ -65,18 +73,18 @@ export function FloatingPanel({
         return;
       }
 
-      if (activeElement === lastElement || !panel.contains(activeElement)) {
+      if (activeElement === lastElement || !currentPanel.contains(activeElement)) {
         event.preventDefault();
         firstElement.focus();
       }
     }
 
-    panel.addEventListener("keydown", handleKeyDown);
+    currentPanel.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      panel.removeEventListener("keydown", handleKeyDown);
+      currentPanel.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [onClose]);
 
   return (
     <div className="floating-panel__backdrop" role="presentation" onClick={onClose}>

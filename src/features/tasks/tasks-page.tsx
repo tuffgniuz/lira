@@ -1,12 +1,15 @@
 import { useMemo, useState } from "react";
-import type { CaptureItem } from "../../models/capture";
-import type { TaskItem, TaskStatus } from "../../models/task";
+import CodeMirror from "@uiw/react-codemirror";
+import { markdown } from "@codemirror/lang-markdown";
+import { EditorView } from "@codemirror/view";
+import { Vim, vim } from "@replit/codemirror-vim";
+import type { Item, TaskStatus } from "../../models/item";
 
 type TasksPageProps = {
-  tasks: TaskItem[];
-  inboxItems: CaptureItem[];
+  items: Item[];
   selectedTaskId: string;
   onSelectTask: (taskId: string) => void;
+  onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
 };
 
 const filterItems: Array<{ id: TaskStatus | "all"; label: string }> = [
@@ -17,44 +20,50 @@ const filterItems: Array<{ id: TaskStatus | "all"; label: string }> = [
   { id: "done", label: "Done" },
 ];
 
+let taskPanelVimBindingsRegistered = false;
+
+function ensureTaskPanelVimBindings() {
+  if (taskPanelVimBindingsRegistered) {
+    return;
+  }
+
+  Vim.defineEx("closepanel", "closepanel", () => {
+    window.dispatchEvent(new CustomEvent("kenchi:close-task-panel"));
+  });
+  Vim.map(":", "<Nop>", "normal");
+  Vim.map("<C-z>z", ":closepanel<CR>", "normal");
+  taskPanelVimBindingsRegistered = true;
+}
+
 export function TasksPage({
-  tasks,
-  inboxItems,
+  items,
   selectedTaskId,
   onSelectTask,
+  onUpdateTask,
 }: TasksPageProps) {
   const [activeFilter, setActiveFilter] = useState<TaskStatus | "all">("all");
+  const selectedTask =
+    items.find((item) => item.id === selectedTaskId && item.kind === "task") ?? null;
 
   const rows = useMemo(() => {
-    const taskRows = tasks
-      .filter((task) => activeFilter === "all" || task.status === activeFilter)
-      .map((task) => ({
-        id: task.id,
-        title: task.title,
-        status: task.status,
-        priority: task.priority || "None",
-        due: task.dueDate || "None",
-        project: task.project || "None",
-        isSelected: selectedTaskId === task.id,
-        onSelect: () => onSelectTask(task.id),
+    return items
+      .filter(
+        (item) =>
+          item.kind === "task" &&
+          item.state !== "deleted" &&
+          (activeFilter === "all" || item.taskStatus === activeFilter),
+      )
+      .map((item) => ({
+        id: item.id,
+        title: item.title,
+        status: item.taskStatus,
+        priority: item.priority || "None",
+        due: item.dueDate || "None",
+        project: item.project || "None",
+        isSelected: selectedTaskId === item.id,
+        onSelect: () => onSelectTask(item.id),
       }));
-
-    const shouldIncludeInboxCaptures = activeFilter === "all" || activeFilter === "inbox";
-    const captureRows = shouldIncludeInboxCaptures
-      ? inboxItems.map((item) => ({
-          id: item.id,
-          title: item.text,
-          status: "inbox" as const,
-          priority: "Capture",
-          due: "None",
-          project: item.project || "Capture Inbox",
-          isSelected: selectedTaskId === item.id,
-          onSelect: () => onSelectTask(item.id),
-        }))
-      : [];
-
-    return [...captureRows, ...taskRows];
-  }, [activeFilter, inboxItems, onSelectTask, selectedTaskId, tasks]);
+  }, [activeFilter, items, onSelectTask, selectedTaskId]);
 
   const selectedRow = rows.find((row) => row.id === selectedTaskId) ?? null;
 
@@ -126,6 +135,16 @@ export function TasksPage({
                 <p className="task-detail-pane__meta">
                   {labelForStatus(selectedRow.status)} • {selectedRow.project}
                 </p>
+                {selectedTask ? (
+                  <TaskDescriptionEditor
+                    value={selectedTask.content}
+                    onChange={(content) => onUpdateTask(selectedTask.id, { content })}
+                  />
+                ) : (
+                  <p className="task-detail-pane__meta">
+                    Markdown editing is available for saved tasks.
+                  </p>
+                )}
               </div>
             ) : null}
           </aside>
@@ -151,4 +170,79 @@ function labelForStatus(status: TaskStatus) {
     default:
       return "Inbox";
   }
+}
+
+const taskDescriptionExtensions = [
+  vim(),
+  markdown(),
+  EditorView.lineWrapping,
+  EditorView.theme({
+    "&": {
+      backgroundColor: "transparent",
+      color: "var(--color-text-primary)",
+      fontFamily: "inherit",
+      fontSize: "0.95rem",
+      lineHeight: "1.6",
+    },
+    ".cm-editor": {
+      backgroundColor: "transparent",
+    },
+    ".cm-scroller": {
+      fontFamily: "inherit",
+    },
+    ".cm-content": {
+      minHeight: "18rem",
+      padding: "0",
+      caretColor: "var(--color-text-primary)",
+    },
+    ".cm-line": {
+      padding: "0",
+    },
+    ".cm-gutters": {
+      display: "none",
+    },
+    ".cm-focused": {
+      outline: "none",
+    },
+    ".cm-cursor, .cm-dropCursor": {
+      borderLeftColor: "var(--color-text-primary)",
+      borderLeftWidth: "2px",
+    },
+    ".cm-fat-cursor, .cm-fat-cursor-mark": {
+      backgroundColor: "var(--color-text-primary)",
+      color: "var(--color-main-bg)",
+    },
+  }),
+];
+
+ensureTaskPanelVimBindings();
+
+function TaskDescriptionEditor({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="task-description-editor">
+      <p className="task-description-editor__label">Description</p>
+      <CodeMirror
+        value={value}
+        aria-label="Task description"
+        className="task-description-editor__surface"
+        placeholder="Write in markdown"
+        extensions={taskDescriptionExtensions}
+        basicSetup={{
+          lineNumbers: false,
+          foldGutter: false,
+          dropCursor: false,
+          allowMultipleSelections: false,
+          highlightActiveLine: false,
+          highlightActiveLineGutter: false,
+        }}
+        onChange={onChange}
+      />
+    </div>
+  );
 }

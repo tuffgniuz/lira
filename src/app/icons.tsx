@@ -132,6 +132,15 @@ export function FolderIcon({ className }: { className?: string }) {
   );
 }
 
+export function UserIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <circle cx="12" cy="8" r="3.25" />
+      <path d="M5.5 18.5a6.5 6.5 0 0 1 13 0" />
+    </IconBase>
+  );
+}
+
 export function ArrowTurnIcon({ className }: { className?: string }) {
   return (
     <IconBase className={className}>

@@ -1,8 +1,10 @@
-import { FolderIcon, PaletteIcon } from "../../app/icons";
+import { useEffect, useRef, useState } from "react";
+import { FolderIcon, PaletteIcon, UserIcon } from "../../app/icons";
+import type { ThemeColorToken } from "../../theme/theme-types";
 
 type SettingsModalProps = {
-  activeSection: "theme" | "vault";
-  onSectionChange: (section: "theme" | "vault") => void;
+  activeSection: "theme" | "profile" | "vault";
+  onSectionChange: (section: "theme" | "profile" | "vault") => void;
   themes: Array<{
     id: string;
     label: string;
@@ -15,9 +17,21 @@ type SettingsModalProps = {
     };
   }>;
   pendingThemeId: string;
+  accentOptions: Array<{
+    id: ThemeColorToken;
+    label: string;
+    tokenLabel: string;
+    color: string;
+  }>;
+  pendingAccentToken: ThemeColorToken;
+  pendingProfileName: string;
+  pendingProfilePicture: string;
   pendingVaultPath: string;
   vaultError: string;
   onPreviewTheme: (themeId: string) => void;
+  onAccentTokenChange: (token: ThemeColorToken) => void;
+  onProfileNameChange: (name: string) => void;
+  onProfilePictureChange: (picture: string) => void;
   onVaultPathChange: (path: string) => void;
   onBrowseVault: () => Promise<void>;
   onClose: () => void;
@@ -29,14 +43,52 @@ export function SettingsModal({
   onSectionChange,
   themes,
   pendingThemeId,
+  accentOptions,
+  pendingAccentToken,
+  pendingProfileName,
+  pendingProfilePicture,
   pendingVaultPath,
   vaultError,
   onPreviewTheme,
+  onAccentTokenChange,
+  onProfileNameChange,
+  onProfilePictureChange,
   onVaultPathChange,
   onBrowseVault,
   onClose,
   onConfirm,
 }: SettingsModalProps) {
+  const [accentMenuOpen, setAccentMenuOpen] = useState(false);
+  const accentMenuRef = useRef<HTMLDivElement | null>(null);
+  const selectedAccent =
+    accentOptions.find((option) => option.id === pendingAccentToken) ?? accentOptions[0];
+
+  useEffect(() => {
+    setAccentMenuOpen(false);
+  }, [activeSection, pendingThemeId, pendingAccentToken]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!accentMenuRef.current?.contains(event.target as Node)) {
+        setAccentMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setAccentMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   return (
     <div className="settings-modal__backdrop" role="presentation" onClick={onClose}>
       <section
@@ -63,6 +115,16 @@ export function SettingsModal({
             >
               <PaletteIcon className="nav-icon" />
               <span>Theme</span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav__button ${
+                activeSection === "profile" ? "is-active" : ""
+              }`}
+              onClick={() => onSectionChange("profile")}
+            >
+              <UserIcon className="nav-icon" />
+              <span>Profile</span>
             </button>
             <button
               type="button"
@@ -121,6 +183,150 @@ export function SettingsModal({
                     </div>
                   </button>
                 ))}
+              </div>
+
+              <div className="accent-picker">
+                <div className="accent-picker__header">
+                  <label className="vault-settings__label" htmlFor="theme-accent-trigger">
+                    Accent token
+                  </label>
+                  <p className="accent-picker__hint">
+                    Use any token from the selected theme as the accent color.
+                  </p>
+                </div>
+
+                <div className="accent-select" ref={accentMenuRef}>
+                  <button
+                    id="theme-accent-trigger"
+                    type="button"
+                    className={`accent-select__trigger ${
+                      accentMenuOpen ? "is-open" : ""
+                    }`}
+                    aria-haspopup="listbox"
+                    aria-expanded={accentMenuOpen}
+                    onClick={() => setAccentMenuOpen((current) => !current)}
+                  >
+                    {selectedAccent ? (
+                      <span className="accent-select__value">
+                        <span
+                          className="accent-select__swatch"
+                          style={{ backgroundColor: selectedAccent.color }}
+                        />
+                        <span>{selectedAccent.label}</span>
+                      </span>
+                    ) : null}
+                    <span className="accent-select__chevron" aria-hidden="true">
+                      {accentMenuOpen ? "−" : "+"}
+                    </span>
+                  </button>
+
+                  {accentMenuOpen ? (
+                    <div className="accent-select__menu" role="listbox">
+                      {accentOptions.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          role="option"
+                          aria-selected={option.id === pendingAccentToken}
+                          className={`accent-select__option ${
+                            option.id === pendingAccentToken ? "is-selected" : ""
+                          }`}
+                          onClick={() => {
+                            onAccentTokenChange(option.id);
+                            setAccentMenuOpen(false);
+                          }}
+                        >
+                          <span
+                            className="accent-select__swatch"
+                            style={{ backgroundColor: option.color }}
+                          />
+                          <span className="accent-select__option-copy">
+                            <span>{option.label}</span>
+                            <span className="accent-select__option-meta">
+                              {option.tokenLabel}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : activeSection === "profile" ? (
+            <div className="settings-panel">
+              <div className="settings-panel__header">
+                <div>
+                  <p className="settings-modal__eyebrow">Identity</p>
+                  <h3 className="settings-panel__title">Profile</h3>
+                </div>
+              </div>
+
+              <div className="profile-settings">
+                <div className="profile-settings__preview">
+                  {pendingProfilePicture ? (
+                    <img
+                      src={pendingProfilePicture}
+                      alt=""
+                      className="profile-settings__avatar-image"
+                    />
+                  ) : (
+                    <span className="profile-settings__avatar-fallback" aria-hidden="true">
+                      {(pendingProfileName.trim() || "U").slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+
+                <div className="profile-settings__fields">
+                  <label className="vault-settings__field">
+                    <span className="vault-settings__label">Name</span>
+                    <input
+                      type="text"
+                      value={pendingProfileName}
+                      onChange={(event) => onProfileNameChange(event.target.value)}
+                      className="vault-settings__input"
+                      placeholder="Your name"
+                      aria-label="Profile name"
+                    />
+                  </label>
+
+                  <label className="vault-settings__field">
+                    <span className="vault-settings__label">Profile picture</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="profile-settings__file-input"
+                      onChange={(event) => {
+                        const [file] = Array.from(event.target.files ?? []);
+
+                        if (!file) {
+                          return;
+                        }
+
+                        const reader = new FileReader();
+
+                        reader.onload = () => {
+                          if (typeof reader.result === "string") {
+                            onProfilePictureChange(reader.result);
+                          }
+                        };
+
+                        reader.readAsDataURL(file);
+                        event.target.value = "";
+                      }}
+                    />
+                  </label>
+
+                  {pendingProfilePicture ? (
+                    <button
+                      type="button"
+                      className="profile-settings__clear"
+                      onClick={() => onProfilePictureChange("")}
+                    >
+                      Remove picture
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
           ) : (

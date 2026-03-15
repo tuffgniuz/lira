@@ -8,9 +8,9 @@ import {
   TargetIcon,
 } from "./icons";
 
-export const profileName = "User";
 export const pageSequence = ["g", "t", "p"];
 export const newInboxItemSequence = ["n", "i"];
+export const newGoalSequence = ["n", "g"];
 export const newTaskSequence = ["n", "t"];
 export const vaultPathStorageKey = "kenchi.vault-path";
 

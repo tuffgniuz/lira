@@ -1,7 +1,15 @@
-import type { ThemeTokens } from "./theme-types";
+import type { ThemeColorToken, ThemeTokens } from "./theme-types";
 
-export function applyTheme(theme: ThemeTokens) {
+type ApplyThemeOptions = {
+  accentToken?: ThemeColorToken;
+};
+
+export function applyTheme(theme: ThemeTokens, options: ApplyThemeOptions = {}) {
   const root = document.documentElement;
+  const accentToken = options.accentToken ?? "accent";
+  const accentColor = theme.colors[accentToken];
+  const accentHoverColor =
+    accentToken === "accent" ? theme.colors.accentHover : theme.colors[accentToken];
 
   root.dataset.theme = theme.id;
   root.style.setProperty("--color-app-bg", theme.colors.appBg);
@@ -15,8 +23,8 @@ export function applyTheme(theme: ThemeTokens) {
   root.style.setProperty("--color-text-primary", theme.colors.textPrimary);
   root.style.setProperty("--color-text-secondary", theme.colors.textSecondary);
   root.style.setProperty("--color-text-muted", theme.colors.textMuted);
-  root.style.setProperty("--color-accent", theme.colors.accent);
-  root.style.setProperty("--color-accent-hover", theme.colors.accentHover);
+  root.style.setProperty("--color-accent", accentColor);
+  root.style.setProperty("--color-accent-hover", accentHoverColor);
   root.style.setProperty("--color-active-bg", theme.colors.activeBg);
   root.style.setProperty("--color-active-text", theme.colors.activeText);
   root.style.setProperty("--color-hover-bg", theme.colors.hoverBg);
