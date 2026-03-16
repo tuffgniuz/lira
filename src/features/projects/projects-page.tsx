@@ -1,44 +1,41 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeftIcon, ColumnsIcon, FocusModeIcon, SettingsIcon } from "../../app/icons";
 import { FloatingPanel } from "../../components/floating-panel";
+import { RightRailColumn } from "../../components/right-rail-column";
 import { ThreeColumnLayout } from "../../components/three-column-layout";
 import type { Item } from "../../models/item";
+import type { JournalEntrySummary } from "../../models/journal";
 import type { Project } from "../../models/project";
 
 export function ProjectsPage({
   projects,
   items,
+  journalSummaries,
+  todayDate,
+  selectedProjectId,
+  onSelectProject,
   onUpdateProject,
   onDeleteProject,
 }: {
   projects: Project[];
   items: Item[];
+  journalSummaries: JournalEntrySummary[];
+  todayDate: string;
+  selectedProjectId: string;
+  onSelectProject: (projectId: string) => void;
   onUpdateProject: (projectId: string, updates: Partial<Project>) => void;
   onDeleteProject: (projectId: string) => void;
 }) {
-  const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [layoutMode, setLayoutMode] = useState<"columns" | "full">("columns");
+  const [layoutMode, setLayoutMode] = useState<"columns" | "full">("full");
   const [detailMode, setDetailMode] = useState<"overview" | "settings">("overview");
   const [nameDraft, setNameDraft] = useState("");
   const [descriptionDraft, setDescriptionDraft] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteConfirmationValue, setDeleteConfirmationValue] = useState("");
 
-  useEffect(() => {
-    if (!projects.length) {
-      setSelectedProjectId("");
-      return;
-    }
-
-    const hasSelectedProject = projects.some((project) => project.id === selectedProjectId);
-
-    if (!hasSelectedProject) {
-      setSelectedProjectId(projects[0].id);
-    }
-  }, [projects, selectedProjectId]);
-
   const selectedProject =
     projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
+  const isExpandedLayout = layoutMode === "full" || detailMode === "settings";
 
   useEffect(() => {
     if (detailMode === "settings") {
@@ -65,7 +62,7 @@ export function ProjectsPage({
         const projectTasks = items.filter(
           (item) =>
             item.kind === "task" &&
-            item.project === project.name &&
+            item.projectId === project.id &&
             item.state !== "deleted",
         );
 
@@ -80,86 +77,25 @@ export function ProjectsPage({
     );
   }, [items, projects]);
 
-  const projectStats = useMemo(() => {
-    if (!selectedProject) {
-      return {
-        totalTasks: 0,
-        remainingTasks: 0,
-        inProgressTasks: 0,
-        completedTasks: 0,
-        activeGoals: [] as Item[],
-      };
-    }
-
-    const relatedTasks = items.filter(
-      (item) =>
-        item.kind === "task" &&
-        item.project === selectedProject.name &&
-        item.state !== "deleted",
-    );
-
-    const activeGoals = items.filter(
-      (item) =>
-        item.kind === "goal" &&
-        item.goalScope?.projectId === selectedProject.id &&
-        item.state === "active",
-    );
-
-    return {
-      totalTasks: relatedTasks.length,
-      remainingTasks: relatedTasks.filter((task) =>
-        ["inbox", "upcoming", "to do"].includes(task.taskStatus),
-      ).length,
-      inProgressTasks: relatedTasks.filter((task) => task.taskStatus === "today").length,
-      completedTasks: relatedTasks.filter((task) => task.taskStatus === "done").length,
-      activeGoals,
-    };
-  }, [items, selectedProject]);
-
   return (
     <section className="page page--projects" aria-label="Projects">
       {projects.length > 0 && selectedProject ? (
         <ThreeColumnLayout
-          className={`projects-layout ${
-            layoutMode === "full" || detailMode === "settings" ? "is-full-width" : ""
-          }`}
+          className={`projects-layout ${isExpandedLayout ? "is-full-width" : ""}`}
           leftClassName="projects-rail"
           centerClassName="projects-detail"
           rightClassName="projects-context"
-          centerOnly={layoutMode === "full" || detailMode === "settings"}
+          centerOnly={isExpandedLayout}
           leftLabel="Projects list"
           centerLabel="Project details"
           rightLabel="Project stats"
           left={
-            <>
-              <div className="projects-rail__header">
-                <p className="page__eyebrow">Projects</p>
-              </div>
-              <div className="projects-rail__list">
-                {projects.map((project) => {
-                  const meta = projectListMeta.get(project.id) ?? {
-                    taskCount: 0,
-                    activityLabel: "created just now",
-                  };
-
-                  return (
-                  <button
-                    key={project.id}
-                    type="button"
-                    className={`projects-rail__item ${
-                      selectedProject.id === project.id ? "is-active" : ""
-                    }`}
-                    onClick={() => setSelectedProjectId(project.id)}
-                  >
-                    <span className="projects-rail__name">{project.name}</span>
-                    <span className="projects-rail__description">
-                      {formatTaskCount(meta.taskCount)} - {meta.activityLabel}
-                    </span>
-                  </button>
-                  );
-                })}
-              </div>
-            </>
+            <ProjectRailList
+              projects={projects}
+              selectedProjectId={selectedProject.id}
+              projectListMeta={projectListMeta}
+              onSelectProject={onSelectProject}
+            />
           }
           center={
             <>
@@ -229,7 +165,7 @@ export function ProjectsPage({
                     </button>
                   </div>
                 </section>
-                ) : (
+              ) : (
                 <div className="projects-detail__actions">
                   <button
                     type="button"
@@ -262,48 +198,7 @@ export function ProjectsPage({
             </>
           }
           right={
-            <>
-              <div className="projects-context__header">
-                <p className="page__eyebrow">Context</p>
-              </div>
-              <section className="projects-context__section">
-                <p className="page__eyebrow">Stats</p>
-                <div className="projects-stats">
-                  <div className="projects-stat-card">
-                    <span className="projects-stat-card__value">{projectStats.totalTasks}</span>
-                    <span className="projects-stat-card__label">Total tasks</span>
-                  </div>
-                  <div className="projects-stat-card">
-                    <span className="projects-stat-card__value">{projectStats.remainingTasks}</span>
-                    <span className="projects-stat-card__label">Remaining</span>
-                  </div>
-                  <div className="projects-stat-card">
-                    <span className="projects-stat-card__value">{projectStats.inProgressTasks}</span>
-                    <span className="projects-stat-card__label">In progress</span>
-                  </div>
-                  <div className="projects-stat-card">
-                    <span className="projects-stat-card__value">{projectStats.completedTasks}</span>
-                    <span className="projects-stat-card__label">Completed</span>
-                  </div>
-                </div>
-              </section>
-
-              <section className="projects-context__section">
-                <p className="page__eyebrow">Active goals</p>
-                {projectStats.activeGoals.length > 0 ? (
-                  <div className="projects-goals">
-                    {projectStats.activeGoals.map((goal) => (
-                      <div key={goal.id} className="projects-goals__item">
-                        <p className="projects-goals__title">{goal.title}</p>
-                        <p className="projects-goals__copy">{goal.content || "No description yet."}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="projects-context__empty">No active goals for this project.</p>
-                )}
-              </section>
-            </>
+            <RightRailColumn items={items} journalSummaries={journalSummaries} todayDate={todayDate} />
           }
         />
       ) : (
@@ -419,6 +314,48 @@ export function ProjectsPage({
         </FloatingPanel>
       ) : null}
     </section>
+  );
+}
+
+function ProjectRailList({
+  projects,
+  selectedProjectId,
+  projectListMeta,
+  onSelectProject,
+}: {
+  projects: Project[];
+  selectedProjectId: string;
+  projectListMeta: Map<string, { taskCount: number; activityLabel: string }>;
+  onSelectProject: (projectId: string) => void;
+}) {
+  return (
+    <>
+      <div className="projects-rail__header">
+        <p className="page__eyebrow">Projects</p>
+      </div>
+      <div className="projects-rail__list">
+        {projects.map((project) => {
+          const meta = projectListMeta.get(project.id) ?? {
+            taskCount: 0,
+            activityLabel: "created just now",
+          };
+
+          return (
+            <button
+              key={project.id}
+              type="button"
+              className={`projects-rail__item ${selectedProjectId === project.id ? "is-active" : ""}`}
+              onClick={() => onSelectProject(project.id)}
+            >
+              <span className="projects-rail__name">{project.name}</span>
+              <span className="projects-rail__description">
+                {formatTaskCount(meta.taskCount)} - {meta.activityLabel}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }
 

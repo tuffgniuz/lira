@@ -22,11 +22,39 @@ The project is currently focused on the application shell and the first keyboard
 ## Keyboard Shortcuts
 Current key-driven interactions:
 
-- `Ctrl+\`` toggles the sidebar
-- `g t p` opens the `Go to page` palette
-- `q c` opens quick capture
-- `:` opens the command launcher
-- `Esc` closes floating windows
+- Global
+  - `Ctrl+\`` toggles the sidebar
+  - `:` opens the command launcher
+  - `Esc` closes the active modal or palette
+
+- Leader sequences
+  - `Space g t p` opens the `Go To Page` palette
+  - `Space l p` opens the `Projects` palette
+  - `Space n i` opens quick capture
+  - `Space n g` opens `New Goal`
+  - `Space n t` opens `New Task`
+  - `Space n p` opens `New Project`
+
+- Command palettes
+  - `Arrow Up` / `Arrow Down` moves selection
+  - `Enter` confirms the highlighted item
+  - `Esc` closes the palette
+
+- Tasks and goals detail panels
+  - `Esc` closes the selected task detail panel
+  - `Esc` closes the selected goal detail panel
+  - `Ctrl+z`, then `z` closes the selected task detail panel
+
+- Journaling
+  - `j` moves to the next day in the day list when you are not typing
+  - `k` moves to the previous day in the day list when you are not typing
+  - `Enter` re-selects the focused day from the journal day list
+
+- Modal submit behavior
+  - `Enter` submits `New Task`, `New Goal`, and `New Project` from single-line inputs and selects
+  - `Ctrl+Enter` / `Cmd+Enter` submits `New Task` and `New Goal` while focused in a textarea
+  - `Enter` submits `New Project` from the description textarea
+  - `Shift+Enter` inserts a newline in the `New Project` description textarea
 
 ## Vault Storage
 Kenchi currently uses a vault-based storage model.

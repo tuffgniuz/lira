@@ -35,6 +35,7 @@ export type Item = {
   createdAt: string;
   updatedAt: string;
   tags: string[];
+  projectId?: string;
   project: string;
   taskStatus: TaskStatus;
   priority: TaskPriority;

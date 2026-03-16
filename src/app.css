@@ -342,6 +342,27 @@ button:focus-visible {
   color: var(--color-text-muted);
 }
 
+.app-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 1rem 1.05rem;
+  border-radius: 16px;
+  background: var(--color-surface-elevated);
+}
+
+.app-card--interactive {
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease;
+}
+
+.app-card--interactive:hover {
+  transform: translateY(-1px);
+  background: var(--color-surface-elevated-hover);
+}
+
 .home-greeting {
   margin: 0;
   font-size: clamp(2rem, 4vw, 3.5rem);
@@ -350,17 +371,9 @@ button:focus-visible {
 }
 
 .home-intention-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
   width: 50%;
   max-width: 36rem;
   margin-top: 1.25rem;
-  padding: 1rem 1.05rem;
-  border: 1px solid var(--color-border-card);
-  border-radius: 16px;
-  background: var(--color-surface-elevated);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .home-intention-card__label,
@@ -522,6 +535,91 @@ button:focus-visible {
   gap: 1rem;
 }
 
+.right-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.right-rail__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.right-rail__heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.right-rail__heading,
+.right-rail__goal-title,
+.right-rail__empty {
+  margin: 0;
+}
+
+.right-rail__heading {
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+}
+
+.right-rail__count,
+.right-rail__empty,
+.right-rail__goal-progress {
+  color: var(--color-text-muted);
+  font-size: 0.84rem;
+}
+
+.right-rail__goals {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.right-rail__goal-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+}
+
+.right-rail__goal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.right-rail__goal-title {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.right-rail__goal-progress {
+  flex: 0 0 auto;
+}
+
+.right-rail__goal-bar {
+  position: relative;
+  overflow: hidden;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-panel-bg) 88%, transparent);
+}
+
+.right-rail__goal-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-accent);
+}
+
 .journal-nav {
   padding-right: 0;
 }
@@ -547,6 +645,7 @@ button:focus-visible {
   position: relative;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 0.24rem;
   width: 100%;
   margin: 0;
@@ -612,14 +711,27 @@ button:focus-visible {
   color: var(--color-text-primary);
 }
 
+.journal-nav__day-preview {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.journal-nav__day.is-active .journal-nav__day-preview,
+.journal-nav__day:focus-visible .journal-nav__day-preview {
+  color: color-mix(in srgb, var(--color-text-secondary) 88%, white 12%);
+}
+
 .journal-daily {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 3rem);
   gap: 1.6rem;
   width: 100%;
-  max-width: 46rem;
-  margin: 0 auto;
   min-width: 0;
   overflow-y: auto;
   padding-right: 0.5rem;
@@ -635,30 +747,7 @@ button:focus-visible {
 .journal-daily__heading {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-}
-
-.journal-mode-switch {
-  display: inline-flex;
-  margin-top: 1rem;
-}
-
-.journal-mode-switch__button {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.35rem 0.7rem;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-size: 0.82rem;
-  line-height: 1;
-}
-
-.journal-mode-switch__button.is-active {
-  color: var(--color-active-text);
-  background: var(--color-accent);
+  gap: 0.45rem;
 }
 
 .journal-section__textarea {
@@ -673,25 +762,37 @@ button:focus-visible {
   resize: none;
 }
 
+.journal-stack {
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.journal-section--entry {
+  min-height: 0;
+  display: flex;
+}
+
 .journal-chat {
   display: flex;
   flex: 1;
   flex-direction: column;
   justify-content: flex-start;
   gap: 0.75rem;
-  min-height: 16rem;
+  min-height: 0;
 }
 
 .journal-chat__message {
+  flex: 1;
+  width: 100%;
+  max-width: none;
+  gap: 0.55rem;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  width: 50%;
-  max-width: 50%;
-  padding: 1rem 1.05rem;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 16px;
-  background: var(--color-surface-elevated);
+  padding: 0.1rem 0;
 }
 
 .journal-chat__message--user {
@@ -713,124 +814,105 @@ button:focus-visible {
   white-space: pre-wrap;
 }
 
-.journal-chat__empty {
+.journal-chat__actions {
   display: flex;
-  flex: 1;
-  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.journal-chat__action {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.35rem;
-  min-height: 14rem;
-  text-align: center;
+  width: 1.95rem;
+  height: 1.95rem;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease;
 }
 
-.journal-chat__empty-art {
-  width: 8.5rem;
-  height: 8.5rem;
+.journal-chat__action:hover {
+  background: color-mix(in srgb, var(--color-hover-bg) 75%, transparent);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-strong);
 }
 
-.journal-chat__empty-svg {
-  width: 100%;
-  height: 100%;
+.journal-chat__action:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
 
-.journal-chat__empty-title,
-.journal-chat__empty-copy {
+.journal-chat__action-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.journal-entry-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0.8rem;
+  min-height: 0;
+  padding: 0.1rem 0;
+}
+
+.journal-entry-editor__label {
   margin: 0;
 }
 
-.journal-chat__empty-title {
-  color: var(--color-text-secondary);
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.journal-chat__empty-copy {
-  max-width: 18rem;
+.journal-entry-editor__label {
   color: var(--color-text-muted);
-  line-height: 1.6;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.journal-chat__composer {
-  margin-top: auto;
-  padding-top: 1rem;
-  padding-inline: 1rem;
-  padding-bottom: 1rem;
-  border-radius: 10px;
-  background: var(--color-surface-elevated);
-}
-
-.journal-chat__input {
+.journal-entry-editor__input {
   width: 100%;
-  min-height: 4.5rem;
+  min-height: 0;
+  flex: 1;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--color-text-primary);
-  line-height: 1.5;
+  font-size: 1rem;
+  line-height: 1.7;
   resize: none;
 }
 
-.journal-prompt-surface,
-.journal-reflection__prompt {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 1rem;
-  border-radius: 10px;
-  background: var(--color-surface-elevated);
-}
-
-.journal-prompt-surface__label {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: 0.86rem;
-}
-
-.journal-reflection {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.journal-chat__input,
-.journal-reflection__textarea,
-.journal-section__textarea {
-  width: 100%;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--color-text-primary);
-}
-
-.journal-chat__input {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.journal-chat__input:focus,
-.journal-reflection__textarea:focus,
+.journal-entry-editor__input:focus,
 .journal-section__textarea:focus {
   outline: none;
 }
 
-.journal-reflection__prompt {
-  padding-bottom: 1rem;
+.journal-entry-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
 }
 
-.journal-reflection__label {
-  color: var(--color-text-muted);
-  font-size: 0.86rem;
+.journal-entry-editor__button {
+  padding: 0.55rem 0.85rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-active-text);
+  cursor: pointer;
+  font-size: 0.84rem;
 }
 
-.journal-reflection__textarea {
-  min-height: 3.4rem;
-  line-height: 1.55;
-  resize: none;
+.journal-entry-editor__button--secondary {
+  background: var(--color-panel-muted);
+  color: var(--color-text-secondary);
 }
 
 .journal-context__section {
@@ -859,10 +941,7 @@ button:focus-visible {
 
 .journal-context__card {
   padding: 0.8rem 0.9rem;
-  border: 1px solid var(--color-border-card);
   border-radius: 12px;
-  background: var(--color-surface-elevated);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   color: var(--color-text-secondary);
   line-height: 1.45;
 }
@@ -1205,25 +1284,14 @@ button:focus-visible {
 }
 
 .goal-card {
-  display: flex;
-  flex-direction: column;
   gap: 1rem;
   padding: 1rem 1.1rem;
-  border: 0;
-  background: var(--color-surface-elevated);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   color: var(--color-text-primary);
-  cursor: pointer;
-  transition:
-    background-color 140ms ease;
-}
-
-.goal-card:hover {
-  background: var(--color-surface-elevated-hover);
 }
 
 .goal-card.is-active {
-  background: var(--color-surface-elevated);
+  transform: translateY(-1px);
+  background: var(--color-surface-elevated-hover);
 }
 
 .goal-card__header {
@@ -1327,9 +1395,10 @@ button:focus-visible {
   align-items: center;
   gap: 0.7rem;
   padding: 0.65rem 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--color-border-card) 88%, transparent);
   background: color-mix(in srgb, var(--color-panel-bg) 84%, var(--color-main-bg) 16%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   color: var(--color-text-secondary);
+  border-radius: 12px;
 }
 
 .goal-card__checkbox {
@@ -1792,14 +1861,9 @@ button:focus-visible {
 
 .projects-stat-card,
 .projects-goals__item {
-  display: flex;
-  flex-direction: column;
   gap: 0.2rem;
   padding: 0.8rem 0.9rem;
-  border: 1px solid var(--color-border-card);
   border-radius: 12px;
-  background: var(--color-surface-elevated);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .projects-stat-card__value,

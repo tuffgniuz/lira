@@ -224,3 +224,13 @@ export function TrashIcon({ className }: { className?: string }) {
     </IconBase>
   );
 }
+
+export function EditIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="m14.5 5.5 4 4" />
+      <path d="M6 18.5h4l9-9a1.4 1.4 0 0 0 0-2l-2.5-2.5a1.4 1.4 0 0 0-2 0l-9 9v4.5Z" />
+      <path d="M13 7l4 4" />
+    </IconBase>
+  );
+}

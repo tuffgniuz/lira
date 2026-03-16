@@ -5,9 +5,12 @@ import { EditorView } from "@codemirror/view";
 import { Vim, vim } from "@replit/codemirror-vim";
 import { FloatingPanel } from "../../components/floating-panel";
 import type { Item, TaskStatus } from "../../models/item";
+import type { Project } from "../../models/project";
+import { getProjectName } from "../../lib/domain/project-relations";
 
 type TasksPageProps = {
   items: Item[];
+  projects: Project[];
   selectedTaskId: string;
   onSelectTask: (taskId: string) => void;
   onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
@@ -39,6 +42,7 @@ function ensureTaskPanelVimBindings() {
 
 export function TasksPage({
   items,
+  projects,
   selectedTaskId,
   onSelectTask,
   onUpdateTask,
@@ -66,11 +70,11 @@ export function TasksPage({
         status: item.taskStatus,
         priority: item.priority || "None",
         due: item.dueDate || "None",
-        project: item.project || "None",
+        project: getProjectName(projects, item.projectId, item.project) || "None",
         isSelected: selectedTaskId === item.id,
         onSelect: () => onSelectTask(item.id),
       }));
-  }, [activeFilter, items, onSelectTask, selectedTaskId]);
+  }, [activeFilter, items, onSelectTask, projects, selectedTaskId]);
 
   const selectedRow = rows.find((row) => row.id === selectedTaskId) ?? null;
 

@@ -1,13 +1,19 @@
 import { useState } from "react";
 import { TrashIcon } from "../../app/icons";
+import { Card } from "../../components/card";
 import { FloatingPanel } from "../../components/floating-panel";
+import { RightRailColumn } from "../../components/right-rail-column";
 import { ThreeColumnLayout } from "../../components/three-column-layout";
+import { resolveGoalProgress, resolveGoalProgressForDate } from "../../lib/domain/goal-progress";
+import { getProjectName } from "../../lib/domain/project-relations";
 import type { GoalPeriod, Item } from "../../models/item";
+import type { JournalEntrySummary } from "../../models/journal";
 import type { Project } from "../../models/project";
 
 type GoalsPageProps = {
   items: Item[];
   projects: Project[];
+  journalSummaries: JournalEntrySummary[];
   todayDate: string;
   selectedGoalId: string;
   onSelectGoal: (goalId: string) => void;
@@ -25,23 +31,25 @@ const periodOptions: Array<{ id: GoalPeriod; label: string }> = [
 export function GoalsPage({
   items,
   projects,
+  journalSummaries,
   todayDate,
   selectedGoalId,
   onSelectGoal,
   onUpdateGoal,
   onDeleteGoal,
 }: GoalsPageProps) {
-  const [activePeriod, setActivePeriod] = useState<GoalPeriod>("weekly");
+  const [activePeriod, setActivePeriod] = useState<GoalPeriod>("daily");
   const [pendingDeleteGoal, setPendingDeleteGoal] = useState<{
     id: string;
     title: string;
   } | null>(null);
-  const weekDays = getCurrentWeekDays(todayDate);
   const goals = items.filter((item) => item.kind === "goal" && item.state === "active");
   const filteredGoals = goals.filter((goal) => goal.goalPeriod === activePeriod);
-  const taskItems = items.filter((item) => item.kind === "task");
-  const dailyGoals = filteredGoals.filter((goal) => goal.goalPeriod === "daily");
-  const visibleGoals = activePeriod === "daily" ? dailyGoals : [];
+  const progressContext = {
+    items,
+    journalSummaries,
+    todayDate,
+  };
 
   return (
     <section className="page page--goals" aria-label="Goals">
@@ -73,38 +81,29 @@ export function GoalsPage({
           </>
         }
         center={
-          activePeriod === "daily" ? (
-            dailyGoals.length > 0 ? (
+          filteredGoals.length > 0 ? (
               <div className="goals-main__section">
                 <header className="goals-main__header">
                   <p className="page__eyebrow">Goals</p>
                   <h1 className="goals-main__title">{labelForPeriod(activePeriod)} goals</h1>
                 </header>
                 <div className="goals-main__cards">
-                  {dailyGoals.map((goal) => {
-                    const linkedTasks = (goal.goalScope?.taskIds ?? [])
-                      .map((taskId) => taskItems.find((item) => item.id === taskId))
-                      .filter((task): task is Item => Boolean(task));
+                  {filteredGoals.map((goal) => {
+                    const progress = resolveGoalProgress(goal, progressContext);
                     const progressByDate = goal.goalProgressByDate ?? {};
-                    const todaysProgress = progressByDate[todayDate] ?? goal.goalProgress ?? 0;
-                    const manualProgress = Math.max(0, Math.min(todaysProgress, goal.goalTarget));
-                    const hasLinkedTasks = linkedTasks.length > 0;
-                    const completedCount = hasLinkedTasks
-                      ? linkedTasks.filter((task) => task.taskStatus === "done").length
-                      : manualProgress;
-                    const progressDenominator = hasLinkedTasks ? linkedTasks.length : goal.goalTarget;
-                    const progressPercent =
-                      progressDenominator > 0
-                        ? Math.min(100, Math.max(0, (completedCount / progressDenominator) * 100))
-                        : 0;
-                    const projectName = goal.goalScope?.projectId
-                      ? projects.find((project) => project.id === goal.goalScope?.projectId)?.name ?? ""
-                      : "No linked project yet";
+                    const manualProgress = resolveGoalProgressForDate(goal, progressContext, todayDate);
+                    const projectName = getProjectName(
+                      projects,
+                      goal.goalScope?.projectId,
+                      "No linked project yet",
+                    );
 
                     return (
-                      <article
+                      <Card
+                        as="article"
                         key={goal.id}
                         className={`goal-card ${selectedGoalId === goal.id ? "is-active" : ""}`}
+                        interactive
                         onClick={() => onSelectGoal(goal.id)}
                       >
                         <div className="goal-card__header">
@@ -113,15 +112,20 @@ export function GoalsPage({
                             {goal.content.trim() ? (
                               <p className="goal-card__description">{goal.content}</p>
                             ) : null}
-                            <p className="goal-card__meta">{projectName}</p>
+                            <p className="goal-card__meta">
+                              {projectName}
+                              {goal.goalTrackingMode === "automatic"
+                                ? ` • ${formatMetricLabel(goal.goalMetric)}`
+                                : " • Manual"}
+                            </p>
                           </div>
                           <p className="goal-card__progress">
-                            {completedCount} / {progressDenominator}
+                            {progress.completedCount} / {progress.progressDenominator}
                           </p>
                         </div>
-                        {hasLinkedTasks ? (
+                        {progress.linkedTasks.length > 0 ? (
                           <div className="goal-card__linked-tasks">
-                            {linkedTasks.map((task) => (
+                            {progress.linkedTasks.map((task) => (
                               <label key={task.id} className="goal-card__linked-task">
                                 <input
                                   type="checkbox"
@@ -132,7 +136,7 @@ export function GoalsPage({
                               </label>
                             ))}
                           </div>
-                        ) : (
+                        ) : progress.isManual ? (
                           <div className="goal-card__checklist" aria-label={`${goal.title} progress`}>
                             {Array.from({ length: goal.goalTarget }, (_, index) => {
                               const checked = index < manualProgress;
@@ -160,11 +164,17 @@ export function GoalsPage({
                               );
                             })}
                           </div>
+                        ) : (
+                          <div className="goal-card__linked-tasks" aria-label={`${goal.title} source`}>
+                            <p className="goal-card__description">
+                              {automaticGoalDescription(goal)}
+                            </p>
+                          </div>
                         )}
                         <div className="goal-card__progress-bar" aria-hidden="true">
                           <div
                             className="goal-card__progress-fill"
-                            style={{ width: `${progressPercent}%` }}
+                            style={{ width: `${progress.progressPercent}%` }}
                           />
                         </div>
                         <div className="goal-card__actions" onClick={(event) => event.stopPropagation()}>
@@ -177,7 +187,7 @@ export function GoalsPage({
                             <TrashIcon className="goal-card__delete-icon" />
                           </button>
                         </div>
-                      </article>
+                      </Card>
                     );
                   })}
                 </div>
@@ -236,126 +246,13 @@ export function GoalsPage({
                   <p className="page__eyebrow">Goals</p>
                   <h1 className="goals-main__title">{labelForPeriod(activePeriod)} goals</h1>
                 </header>
-                <p className="goals-empty__title">No daily goals yet</p>
-                <p className="goals-empty__copy">Create a daily goal to give today a target.</p>
+                <p className="goals-empty__title">No {activePeriod} goals yet</p>
+                <p className="goals-empty__copy">Create a goal to give this period a target.</p>
               </div>
             )
-          ) : (
-            <div className="goals-empty">
-              <div className="goals-empty__art" aria-hidden="true">
-                <svg viewBox="0 0 180 180" className="goals-empty__svg">
-                  <defs>
-                    <linearGradient id="goals-empty-future-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="var(--color-accent)" stopOpacity="0.9" />
-                      <stop offset="100%" stopColor="var(--color-focus-ring)" stopOpacity="0.75" />
-                    </linearGradient>
-                  </defs>
-                  <circle
-                    cx="90"
-                    cy="90"
-                    r="68"
-                    fill="url(#goals-empty-future-gradient)"
-                    opacity="0.12"
-                  />
-                  <path
-                    d="M54 64h72v52H54z"
-                    fill="none"
-                    stroke="var(--color-border-strong)"
-                    strokeWidth="4"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M68 80h44M68 94h28M68 108h36"
-                    fill="none"
-                    stroke="var(--color-text-secondary)"
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </div>
-              <header className="goals-main__header">
-                <p className="page__eyebrow">Goals</p>
-                <h1 className="goals-main__title">{labelForPeriod(activePeriod)} goals</h1>
-              </header>
-              <p className="goals-empty__title">{labelForPeriod(activePeriod)} goals coming next</p>
-              <p className="goals-empty__copy">This draft only renders daily goals for now.</p>
-            </div>
-          )
         }
         right={
-          <div className="goals-insights__section">
-            <header className="goals-insights__header">
-              <p className="page__eyebrow">Overview</p>
-              <h2 className="goals-insights__title">{labelForPeriod(activePeriod)} goals</h2>
-            </header>
-            {visibleGoals.length > 0 ? (
-              <div className="goals-insights__list">
-                {visibleGoals.map((goal) => {
-                  const linkedTasks = (goal.goalScope?.taskIds ?? [])
-                    .map((taskId) => taskItems.find((item) => item.id === taskId))
-                    .filter((task): task is Item => Boolean(task));
-                  const progressByDate = goal.goalProgressByDate ?? {};
-
-                  return (
-                    <button
-                      key={goal.id}
-                      type="button"
-                      className={`goals-insights__item ${
-                        selectedGoalId === goal.id ? "is-active" : ""
-                      }`}
-                      onClick={() => onSelectGoal(goal.id)}
-                    >
-                      <span className="goals-insights__item-title">{goal.title}</span>
-                      <div className="goals-insights__week" aria-hidden="true">
-                        {weekDays.map((day) => {
-                          const linkedCompletedCount =
-                            linkedTasks.length > 0
-                              ? linkedTasks.filter((task) => task.completedAt === day.date).length
-                              : 0;
-                          const loggedProgress =
-                            linkedTasks.length > 0
-                              ? linkedCompletedCount
-                              : Math.max(
-                                  0,
-                                  Math.min(
-                                    progressByDate[day.date] ??
-                                      (day.date === todayDate ? goal.goalProgress ?? 0 : 0),
-                                    goal.goalTarget,
-                                  ),
-                                );
-                          const progressDenominator =
-                            linkedTasks.length > 0 ? linkedTasks.length : goal.goalTarget;
-                          const state =
-                            day.date > todayDate
-                              ? "upcoming"
-                              : loggedProgress >= progressDenominator
-                                ? "done"
-                                : day.date === todayDate
-                                  ? "upcoming"
-                                  : "missed";
-
-                          return (
-                            <div key={day.key} className="goals-insights__day">
-                              <span className="goals-insights__day-label">{day.label}</span>
-                              <span className={`goals-insights__day-state is-${state}`}>
-                                {state === "done" ? "✓" : state === "missed" ? "×" : "—"}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="goals-insights__empty">
-                {activePeriod === "daily"
-                  ? "No daily goals to show yet."
-                  : `${labelForPeriod(activePeriod)} goals will appear here next.`}
-              </p>
-            )}
-          </div>
+          <RightRailColumn items={items} journalSummaries={journalSummaries} todayDate={todayDate} />
         }
       />
 
@@ -377,34 +274,28 @@ function labelForPeriod(period: GoalPeriod) {
   return period.slice(0, 1).toUpperCase() + period.slice(1);
 }
 
-function getCurrentWeekDays(todayDate: string) {
-  const current = new Date(`${todayDate}T00:00:00`);
-  const mondayOffset = current.getDay() === 0 ? -6 : 1 - current.getDay();
-  const monday = shiftDate(current, mondayOffset);
-  const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = shiftDate(monday, index);
-
-    return {
-      key: labels[index].toLowerCase(),
-      label: labels[index],
-      date: toDateString(date),
-    };
-  });
+function formatMetricLabel(metric: Item["goalMetric"]) {
+  switch (metric) {
+    case "tasks_completed":
+      return "Tasks";
+    case "journal_entries_written":
+      return "Journal";
+    case "manual_units":
+      return "Manual";
+    default:
+      return "Automatic";
+  }
 }
 
-function shiftDate(date: Date, amount: number) {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + amount);
-  return nextDate;
-}
-
-function toDateString(date: Date) {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function automaticGoalDescription(goal: Item) {
+  switch (goal.goalMetric) {
+    case "tasks_completed":
+      return "Progress updates from completed tasks in the current period.";
+    case "journal_entries_written":
+      return "Progress updates from journal entries written in the current period.";
+    default:
+      return "Progress updates automatically from activity in the current period.";
+  }
 }
 
 function GoalDeleteConfirmModal({

@@ -7,6 +7,7 @@ import {
   ArrowTurnIcon,
   BurgerIcon,
   CollapseSidebarIcon,
+  LayersIcon,
   SettingsIcon,
   SparkIcon,
 } from "../../app/icons";
@@ -16,6 +17,7 @@ import {
 } from "../../app/navigation";
 import {
   leaderKey,
+  listProjectsSequence,
   mappedSequences,
   newGoalSequence,
   newInboxItemSequence,
@@ -34,6 +36,15 @@ import {
 } from "../../lib/storage/journal";
 import { loadProjects, saveProjects } from "../../lib/storage/projects";
 import { loadProfile, saveProfile } from "../../lib/storage/profile";
+import {
+  attachProjectIdsFromNames,
+  clearProjectReferences,
+  getProjectName,
+} from "../../lib/domain/project-relations";
+import {
+  applyJournalEntryUpdates,
+  upsertJournalSummary,
+} from "../../lib/domain/journal-entry-state";
 import type { Item } from "../../models/item";
 import type { JournalEntry, JournalEntrySummary } from "../../models/journal";
 import type { Project } from "../../models/project";
@@ -136,6 +147,38 @@ function createDefaultJournalEntry(date: string): JournalEntry {
   };
 }
 
+function shiftDateString(date: string, amount: number) {
+  const current = new Date(`${date}T00:00:00`);
+  current.setDate(current.getDate() + amount);
+
+  const year = current.getFullYear();
+  const month = `${current.getMonth() + 1}`.padStart(2, "0");
+  const day = `${current.getDate()}`.padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function createDefaultJournalSummaries(todayDate: string): JournalEntrySummary[] {
+  return [
+    {
+      date: shiftDateString(todayDate, -1),
+      preview: "Read the project instructions, finish the transcript review, close two tasks.",
+    },
+    {
+      date: todayDate,
+      preview: "Ship the review notes and tighten the journal interactions.",
+    },
+    {
+      date: shiftDateString(todayDate, -2),
+      preview: "Draft the daily goals layout and capture rough copy ideas.",
+    },
+    {
+      date: shiftDateString(todayDate, -3),
+      preview: "Sort inbox notes, clarify the next project milestone, keep scope narrow.",
+    },
+  ];
+}
+
 export function KenchiShell() {
   const {
     activeThemeId,
@@ -172,10 +215,12 @@ export function KenchiShell() {
   const [pendingProfilePicture, setPendingProfilePicture] = useState(
     defaultProfile.profilePicture,
   );
+  const todayDate = getTodayDateString();
   const [items, setItems] = useState<Item[]>(defaultItems);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [journalSummaries, setJournalSummaries] = useState<JournalEntrySummary[]>([]);
-  const todayDate = getTodayDateString();
+  const [journalSummaries, setJournalSummaries] = useState<JournalEntrySummary[]>(() =>
+    createDefaultJournalSummaries(todayDate),
+  );
   const [selectedJournalDate, setSelectedJournalDate] = useState(todayDate);
   const [journalEntry, setJournalEntry] = useState<JournalEntry>(() =>
     createDefaultJournalEntry(todayDate),
@@ -183,11 +228,13 @@ export function KenchiShell() {
   const [todayJournalEntry, setTodayJournalEntry] = useState<JournalEntry>(() =>
     createDefaultJournalEntry(todayDate),
   );
+  const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedGoalId, setSelectedGoalId] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [toastMessage, setToastMessage] = useState("");
   const [pendingCreateToast, setPendingCreateToast] = useState("");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [projectPaletteOpen, setProjectPaletteOpen] = useState(false);
   const [commandLauncherOpen, setCommandLauncherOpen] = useState(false);
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
   const [newGoalOpen, setNewGoalOpen] = useState(false);
@@ -204,6 +251,12 @@ export function KenchiShell() {
     label: item.label,
     keywords: [item.id.replace("_", " "), item.label.toLowerCase()],
     icon: <item.icon className="nav-icon" />,
+  }));
+  const projectItems: CommandPaletteItem[] = projects.map((project) => ({
+    id: project.id,
+    label: project.name,
+    keywords: [project.description.toLowerCase(), "project"],
+    icon: <LayersIcon className="nav-icon" />,
   }));
   const pendingTheme = themes.find((theme) => theme.id === pendingThemeId) ?? themes[0];
   const accentOptions = Object.entries(pendingTheme.colors).map(([token, color]) => ({
@@ -268,6 +321,19 @@ export function KenchiShell() {
   }
 
   useEffect(() => {
+    if (!projects.length) {
+      setSelectedProjectId("");
+      return;
+    }
+
+    const hasSelectedProject = projects.some((project) => project.id === selectedProjectId);
+
+    if (!hasSelectedProject) {
+      setSelectedProjectId(projects[0].id);
+    }
+  }, [projects, selectedProjectId]);
+
+  useEffect(() => {
     if (!toastMessage) {
       return;
     }
@@ -312,6 +378,13 @@ export function KenchiShell() {
       if (event.key === "Escape" && commandLauncherOpen) {
         event.preventDefault();
         setCommandLauncherOpen(false);
+        clearKeySequence();
+        return;
+      }
+
+      if (event.key === "Escape" && projectPaletteOpen) {
+        event.preventDefault();
+        setProjectPaletteOpen(false);
         clearKeySequence();
         return;
       }
@@ -392,6 +465,7 @@ export function KenchiShell() {
 
       if (
         commandPaletteOpen ||
+        projectPaletteOpen ||
         commandLauncherOpen ||
         quickCaptureOpen ||
         newGoalOpen ||
@@ -447,6 +521,17 @@ export function KenchiShell() {
         return;
       }
 
+      if (nextSequence.join("") === listProjectsSequence.join("")) {
+        event.preventDefault();
+        if (projects.length > 0) {
+          setProjectPaletteOpen(true);
+        } else {
+          setToastMessage("No projects yet.");
+        }
+        clearKeySequence();
+        return;
+      }
+
       if (nextSequence.join("") === newInboxItemSequence.join("")) {
         event.preventDefault();
         setQuickCaptureOpen(true);
@@ -493,9 +578,11 @@ export function KenchiShell() {
     activeView,
     commandLauncherOpen,
     commandPaletteOpen,
+    projectPaletteOpen,
     newGoalOpen,
     newProjectOpen,
     newTaskOpen,
+    projects.length,
     quickCaptureOpen,
     selectedGoalId,
     selectedTaskId,
@@ -595,13 +682,21 @@ export function KenchiShell() {
   }, [vaultPath]);
 
   useEffect(() => {
+    if (!projects.length) {
+      return;
+    }
+
+    mutateItems((current) => attachProjectIdsFromNames(current, projects));
+  }, [projects]);
+
+  useEffect(() => {
     let cancelled = false;
 
     if (!vaultPath) {
       setJournalEntry(createDefaultJournalEntry(selectedJournalDate));
       setTodayJournalEntry(createDefaultJournalEntry(todayDate));
       setLoadedJournalVaultPath("");
-      setJournalSummaries([]);
+      setJournalSummaries(createDefaultJournalSummaries(todayDate));
       return;
     }
 
@@ -662,7 +757,7 @@ export function KenchiShell() {
     let cancelled = false;
 
     if (!vaultPath) {
-      setJournalSummaries([]);
+      setJournalSummaries(createDefaultJournalSummaries(todayDate));
       return;
     }
 
@@ -681,7 +776,7 @@ export function KenchiShell() {
     return () => {
       cancelled = true;
     };
-  }, [journalEntry.updatedAt, vaultPath]);
+  }, [todayDate, vaultPath]);
 
   useEffect(() => {
     let cancelled = false;
@@ -762,11 +857,23 @@ export function KenchiShell() {
       return;
     }
 
-    void saveJournalEntry(vaultPath, journalEntry);
+    void saveJournalEntry(vaultPath, journalEntry)
+      .then(() => listJournalEntries(vaultPath))
+      .then((summaries) => {
+        setJournalSummaries(summaries);
+      })
+      .catch(() => {
+        // Keep the optimistic summary state if the save or reload fails.
+      });
   }, [journalEntry, loadedJournalVaultPath, vaultPath]);
 
   function navigateToPage(view: ViewId) {
     setActiveView(view);
+  }
+
+  function navigateToProject(projectId: string) {
+    setSelectedProjectId(projectId);
+    setActiveView("projects");
   }
 
   function openSettings() {
@@ -851,6 +958,11 @@ export function KenchiShell() {
     setCommandPaletteOpen(false);
   }
 
+  function handleSelectProject(item: CommandPaletteItem) {
+    navigateToProject(item.id);
+    setProjectPaletteOpen(false);
+  }
+
   function handleCaptureThought(value: string) {
     const text = value.trim();
 
@@ -889,9 +1001,6 @@ export function KenchiShell() {
   }
 
   function handleCreateTask(task: { title: string; description: string; projectId: string }) {
-    const projectName = task.projectId
-      ? projects.find((project) => project.id === task.projectId)?.name ?? ""
-      : "";
     const nextTask: Item = {
       id: `item-${Date.now()}`,
       kind: "task",
@@ -902,7 +1011,8 @@ export function KenchiShell() {
       createdAt: "just now",
       updatedAt: "just now",
       tags: [],
-      project: projectName,
+      projectId: task.projectId || undefined,
+      project: getProjectName(projects, task.projectId, ""),
       taskStatus: "inbox",
       priority: "",
       dueDate: "",
@@ -977,6 +1087,7 @@ export function KenchiShell() {
     projectMutationVersionRef.current += 1;
     setProjects((current) => [nextProject, ...current]);
     setPendingCreateToast("Project saved to vault.");
+    setSelectedProjectId(nextProject.id);
     setNewProjectOpen(false);
     setActiveView("projects");
   }
@@ -1005,16 +1116,6 @@ export function KenchiShell() {
         return current;
       }
 
-      if (nextName !== existingProject.name) {
-        mutateItems((itemsCurrent) =>
-          itemsCurrent.map((item) =>
-            item.project === existingProject.name
-              ? { ...item, project: nextName, updatedAt: timestamp }
-              : item,
-          ),
-        );
-      }
-
       return current.map((project) =>
         project.id === projectId
           ? {
@@ -1031,6 +1132,8 @@ export function KenchiShell() {
   function handleDeleteProject(projectId: string) {
     projectMutationVersionRef.current += 1;
     setProjects((current) => current.filter((project) => project.id !== projectId));
+    mutateItems((current) => clearProjectReferences(current, projectId));
+    setSelectedProjectId((current) => (current === projectId ? "" : current));
   }
 
   function handleUpdateTask(taskId: string, updates: Partial<Item>) {
@@ -1072,11 +1175,13 @@ export function KenchiShell() {
   }
 
   function handleUpdateJournalEntry(updates: Partial<JournalEntry>) {
-    setJournalEntry((current) => ({
-      ...current,
-      ...updates,
-      updatedAt: "just now",
-    }));
+    const updatedAt = new Date().toISOString();
+
+    setJournalEntry((current) => {
+      const nextEntry = applyJournalEntryUpdates(current, updates, updatedAt);
+      setJournalSummaries((currentSummaries) => upsertJournalSummary(currentSummaries, nextEntry));
+      return nextEntry;
+    });
   }
 
   function handleTransformItem(itemId: string, kind: Item["kind"]) {
@@ -1246,8 +1351,10 @@ export function KenchiShell() {
               journalEntry={journalEntry}
               todayJournalEntry={todayJournalEntry}
               projects={projects}
+              selectedProjectId={selectedProjectId}
               selectedGoalId={selectedGoalId}
               selectedTaskId={selectedTaskId}
+              onSelectProject={setSelectedProjectId}
               onSelectGoal={setSelectedGoalId}
               onUpdateGoal={handleUpdateGoal}
               onDeleteGoal={handleDeleteItem}
@@ -1310,6 +1417,16 @@ export function KenchiShell() {
         emptyMessage="No pages match that query."
         onClose={() => setCommandPaletteOpen(false)}
         onSelect={handleSelectPage}
+      />
+
+      <CommandPalette
+        title="Projects"
+        placeholder="list projects"
+        items={projectItems}
+        isOpen={projectPaletteOpen}
+        emptyMessage="No projects match that query."
+        onClose={() => setProjectPaletteOpen(false)}
+        onSelect={handleSelectProject}
       />
 
       <CommandPalette

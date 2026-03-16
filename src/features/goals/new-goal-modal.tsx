@@ -12,9 +12,7 @@ const periodOptions: Array<{ id: GoalPeriod; label: string }> = [
 
 const automaticMetricOptions: Array<{ id: GoalMetric; label: string }> = [
   { id: "tasks_completed", label: "Tasks completed" },
-  { id: "inbox_items_processed", label: "Inbox items processed" },
   { id: "journal_entries_written", label: "Journal entries written" },
-  { id: "notes_created", label: "Notes created" },
 ];
 
 export function NewGoalModal({
@@ -144,7 +142,7 @@ export function NewGoalModal({
             >
               <span className="new-goal__tracking-option-title">Automatically from activity</span>
               <span className="new-goal__tracking-option-copy">
-                Progress updates when tasks or notes are completed.
+                Progress updates from completed tasks or journal entries.
               </span>
             </button>
             <button

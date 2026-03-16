@@ -1,6 +1,7 @@
 export const leaderKey = " ";
 
 export const pageSequence = [leaderKey, "g", "t", "p"] as const;
+export const listProjectsSequence = [leaderKey, "l", "p"] as const;
 export const newInboxItemSequence = [leaderKey, "n", "i"] as const;
 export const newGoalSequence = [leaderKey, "n", "g"] as const;
 export const newTaskSequence = [leaderKey, "n", "t"] as const;
@@ -8,6 +9,7 @@ export const newProjectSequence = [leaderKey, "n", "p"] as const;
 
 export const mappedSequences = [
   pageSequence,
+  listProjectsSequence,
   newInboxItemSequence,
   newGoalSequence,
   newTaskSequence,

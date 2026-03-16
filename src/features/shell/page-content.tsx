@@ -1,5 +1,6 @@
 import { viewTitles } from "../../app/navigation";
 import type { ViewId } from "../../app/types";
+import { Card } from "../../components/card";
 import type { Item } from "../../models/item";
 import type { JournalEntry, JournalEntrySummary } from "../../models/journal";
 import type { Project } from "../../models/project";
@@ -18,8 +19,10 @@ type PageContentProps = {
   journalEntry: JournalEntry;
   todayJournalEntry: JournalEntry;
   projects: Project[];
+  selectedProjectId: string;
   selectedGoalId: string;
   selectedTaskId: string;
+  onSelectProject: (projectId: string) => void;
   onSelectGoal: (goalId: string) => void;
   onUpdateGoal: (goalId: string, updates: Partial<Item>) => void;
   onDeleteGoal: (goalId: string) => void;
@@ -45,8 +48,10 @@ export function PageContent({
   journalEntry,
   todayJournalEntry,
   projects,
+  selectedProjectId,
   selectedGoalId,
   selectedTaskId,
+  onSelectProject,
   onSelectGoal,
   onUpdateGoal,
   onDeleteGoal,
@@ -67,10 +72,10 @@ export function PageContent({
       <section className="page page--dashboard" aria-label="Dashboard">
         <h1 className="home-greeting">{getGreetingForTime(new Date())}</h1>
         {todayJournalEntry.morningIntention.trim() ? (
-          <article className="home-intention-card" aria-label="Today's intention">
+          <Card as="article" className="home-intention-card" aria-label="Today's intention">
             <p className="home-intention-card__label">Today&apos;s intention</p>
             <p className="home-intention-card__body">{todayJournalEntry.morningIntention}</p>
-          </article>
+          </Card>
         ) : null}
       </section>
     );
@@ -95,6 +100,7 @@ export function PageContent({
       <GoalsPage
         items={items}
         projects={projects}
+        journalSummaries={journalSummaries}
         todayDate={todayDate}
         selectedGoalId={selectedGoalId}
         onSelectGoal={onSelectGoal}
@@ -108,6 +114,7 @@ export function PageContent({
     return (
       <TasksPage
         items={items}
+        projects={projects}
         selectedTaskId={selectedTaskId}
         onSelectTask={onSelectTask}
         onUpdateTask={onUpdateTask}
@@ -135,6 +142,10 @@ export function PageContent({
       <ProjectsPage
         projects={projects}
         items={items}
+        journalSummaries={journalSummaries}
+        todayDate={todayDate}
+        selectedProjectId={selectedProjectId}
+        onSelectProject={onSelectProject}
         onUpdateProject={onUpdateProject}
         onDeleteProject={onDeleteProject}
       />
