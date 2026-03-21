@@ -10,9 +10,6 @@
 **noun**
 
 A state of smooth, continuous movement; flow without friction.  
-Effortless productivity achieved through natural, uninterrupted action.  
-A system or approach that enables work to progress intuitively and efficiently, without unnecessary resistance or complexity.
-
 
 ## Summary
 Lira is an opinionated, keyboard-first, local-first desktop system for independent work.
