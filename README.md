@@ -9,23 +9,13 @@
 Kenchi is an opinionated, keyboard-first, local-first desktop system for independent work. It is designed for people who need help turning scattered thoughts, intrusive ideas, goals, and intentions into a clear daily workflow through quick capture, task management, lightweight projects, measurable goals, and reflective journaling.
 </div>
 
-## Current Scope
-The project is currently focused on the application shell and the first keyboard-driven workflows:
-
-- collapsible left sidebar with primary navigation
-- theme system with built-in themes and live preview in settings
-- vault configuration with native directory picker
-- quick capture available from anywhere in the app
-- capture inbox list backed by vault storage
-- command palette flows for navigation and commands
-
-## Keyboard Shortcuts
-Current key-driven interactions:
-
+## Keymappings
 - Global
   - `Ctrl+\`` toggles the sidebar
   - `:` opens the command launcher
   - `Esc` closes the active modal or palette
+  - `Shift+H` moves backward through navigation history
+  - `Shift+L` moves forward through navigation history
 
 - Leader sequences
   - `Space g t p` opens the `Go To Page` palette
@@ -35,15 +25,31 @@ Current key-driven interactions:
   - `Space n t` opens `New Task`
   - `Space n p` opens `New Project`
 
-- Command palettes
+- Command palette
   - `Arrow Up` / `Arrow Down` moves selection
+  - `Ctrl+P` / `Ctrl+N` moves selection
+  - `Tab` / `Shift+Tab` cycles selection
   - `Enter` confirms the highlighted item
   - `Esc` closes the palette
 
-- Tasks and goals detail panels
-  - `Esc` closes the selected task detail panel
-  - `Esc` closes the selected goal detail panel
-  - `Ctrl+z`, then `z` closes the selected task detail panel
+- Tasks page
+  - `j` / `ArrowDown` moves to the next task
+  - `k` / `ArrowUp` moves to the previous task
+  - `Enter` opens the highlighted task
+
+- Task detail page
+  - opens with the editor focused in Vim insert mode
+  - `Esc` closes the page when the editor is in normal mode
+  - `Shift+H` / `Shift+L` works in normal mode for history navigation
+
+- Projects board
+  - `h` / `ArrowLeft` focuses the previous lane
+  - `l` / `ArrowRight` focuses the next lane
+  - `Tab` / `Shift+Tab` cycles lane focus
+  - `j` moves to the next task inside the focused lane
+  - `k` moves to the previous task inside the focused lane
+  - `n` creates a new task in the focused lane
+  - `Enter` opens the focused task
 
 - Journaling
   - `j` moves to the next day in the day list when you are not typing
