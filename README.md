@@ -9,9 +9,9 @@
 
 **noun**
 
-1. A state of smooth, continuous movement; flow without friction.  
-2. Effortless productivity achieved through natural, uninterrupted action.  
-3. A system or approach that enables work to progress intuitively and efficiently, without unnecessary resistance or complexity.
+A state of smooth, continuous movement; flow without friction.  
+Effortless productivity achieved through natural, uninterrupted action.  
+A system or approach that enables work to progress intuitively and efficiently, without unnecessary resistance or complexity.
 
 
 ## Summary
