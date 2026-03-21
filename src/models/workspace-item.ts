@@ -1,4 +1,4 @@
-export type WorkspaceItemKind = "capture" | "task" | "goal" | "document";
+export type WorkspaceItemKind = "capture" | "task" | "goal";
 
 export type WorkspaceItemState = "inbox" | "someday" | "active" | "archived" | "deleted";
 
@@ -29,6 +29,7 @@ export type WorkspaceItem = {
   updatedAt: string;
   tags: string[];
   projectId?: string;
+  projectLaneId?: string;
   project: string;
   isCompleted: boolean;
   priority: TaskPriority;

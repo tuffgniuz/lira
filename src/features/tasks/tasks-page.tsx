@@ -1,8 +1,4 @@
-import { useMemo, useState } from "react";
-import CodeMirror from "@uiw/react-codemirror";
-import { markdown } from "@codemirror/lang-markdown";
-import { EditorView } from "@codemirror/view";
-import { Vim, vim } from "@replit/codemirror-vim";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionBar } from "../../components/ui/action-bar";
 import { EmptyState } from "../../components/ui/empty-state";
 import { Modal } from "../../components/ui/modal";
@@ -14,9 +10,7 @@ import { getProjectName } from "../../lib/domain/project-relations";
 type TasksPageProps = {
   items: Item[];
   projects: Project[];
-  selectedTaskId: string;
   onSelectTask: (taskId: string) => void;
-  onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
   onDeleteTask: (taskId: string) => void;
 };
 
@@ -26,36 +20,26 @@ const filterItems: Array<{ id: "open" | "completed" | "all"; label: string }> = 
   { id: "all", label: "All" },
 ];
 
-let taskPanelVimBindingsRegistered = false;
-
-function ensureTaskPanelVimBindings() {
-  if (taskPanelVimBindingsRegistered) {
-    return;
-  }
-
-  Vim.defineEx("closepanel", "closepanel", () => {
-    window.dispatchEvent(new CustomEvent("kenchi:close-task-panel"));
-  });
-  Vim.map(":", "<Nop>", "normal");
-  Vim.map("<C-z>z", ":closepanel<CR>", "normal");
-  taskPanelVimBindingsRegistered = true;
-}
+const taskListMotionOffsets = {
+  j: 1,
+  k: -1,
+  ArrowDown: 1,
+  ArrowUp: -1,
+} as const satisfies Record<string, 1 | -1>;
 
 export function TasksPage({
   items,
   projects,
-  selectedTaskId,
   onSelectTask,
-  onUpdateTask,
   onDeleteTask,
 }: TasksPageProps) {
   const [activeFilter, setActiveFilter] = useState<"open" | "completed" | "all">("all");
+  const [activeTaskId, setActiveTaskId] = useState("");
   const [pendingDeleteTask, setPendingDeleteTask] = useState<{
     id: string;
     title: string;
   } | null>(null);
-  const selectedTask =
-    items.find((item) => item.id === selectedTaskId && item.kind === "task") ?? null;
+  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
 
   const rows = useMemo(() => {
     return items
@@ -73,12 +57,86 @@ export function TasksPage({
         priority: item.priority || "None",
         due: item.dueDate || "None",
         project: getProjectName(projects, item.projectId, item.project) || "None",
-        isSelected: selectedTaskId === item.id,
         onSelect: () => onSelectTask(item.id),
       }));
-  }, [activeFilter, items, onSelectTask, projects, selectedTaskId]);
+  }, [activeFilter, items, onSelectTask, projects]);
 
-  const selectedRow = rows.find((row) => row.id === selectedTaskId) ?? null;
+  useEffect(() => {
+    if (!rows.length) {
+      setActiveTaskId("");
+      return;
+    }
+
+    if (!rows.some((row) => row.id === activeTaskId)) {
+      setActiveTaskId(rows[0].id);
+    }
+  }, [activeTaskId, rows]);
+
+  useEffect(() => {
+    if (!activeTaskId) {
+      return;
+    }
+
+    const row = rowRefs.current.get(activeTaskId);
+
+    if (row && typeof row.scrollIntoView === "function") {
+      row.scrollIntoView({
+        block: "nearest",
+      });
+    }
+  }, [activeTaskId]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (pendingDeleteTask) {
+        return;
+      }
+
+      const target = event.target;
+      const isTypingTarget =
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable ||
+          target.getAttribute("contenteditable") === "true" ||
+          target.closest("[contenteditable]") !== null);
+
+      if (isTypingTarget) {
+        return;
+      }
+
+      if (event.key === "Enter") {
+        if (!activeTaskId) {
+          return;
+        }
+
+        event.preventDefault();
+        const activeRow = rows.find((row) => row.id === activeTaskId);
+        activeRow?.onSelect();
+        return;
+      }
+
+      const offset = taskListMotionOffsets[event.key as keyof typeof taskListMotionOffsets];
+
+      if (!offset || !rows.length) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const currentIndex = rows.findIndex((row) => row.id === activeTaskId);
+      const startIndex = currentIndex >= 0 ? currentIndex : 0;
+      const nextIndex = Math.max(0, Math.min(rows.length - 1, startIndex + offset));
+      setActiveTaskId(rows[nextIndex].id);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeTaskId, pendingDeleteTask, rows]);
 
   return (
     <PageShell ariaLabel="Tasks" eyebrow="Tasks" className="page--tasks">
@@ -96,84 +154,68 @@ export function TasksPage({
       </div>
 
       {rows.length > 0 ? (
-        <div className="tasks-stage">
-          <div className="tasks-table-wrap">
-            <table className="tasks-table">
-              <thead>
-                <tr>
-                  <th scope="col">Task</th>
-                  <th scope="col">Completed</th>
-                  <th scope="col">Priority</th>
-                  <th scope="col">Due</th>
-                  <th scope="col">Project</th>
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className={row.isSelected ? "is-active" : ""}
-                    onClick={row.onSelect}
-                  >
-                    <td className="tasks-table__title-cell">
-                      <button type="button" className="tasks-table__row-button">
-                        <span
-                          className={`tasks-table__marker tasks-table__marker--${
-                            row.isCompleted ? "done" : "inbox"
-                          }`}
-                        />
-                        <span>{row.title}</span>
-                      </button>
-                    </td>
-                    <td>{labelForCompletion(row.isCompleted)}</td>
-                    <td>{row.priority}</td>
-                    <td>{row.due}</td>
-                    <td>{row.project}</td>
-                    <td
-                      className="tasks-table__actions-cell"
-                      onClick={(event) => event.stopPropagation()}
+        <div className="tasks-table-wrap">
+          <table className="tasks-table">
+            <thead>
+              <tr>
+                <th scope="col">Task</th>
+                <th scope="col">Completed</th>
+                <th scope="col">Priority</th>
+                <th scope="col">Due</th>
+                <th scope="col">Project</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr
+                  key={row.id}
+                  ref={(element) => {
+                    if (element) {
+                      rowRefs.current.set(row.id, element);
+                    } else {
+                      rowRefs.current.delete(row.id);
+                    }
+                  }}
+                  className={activeTaskId === row.id ? "is-active" : ""}
+                  aria-selected={activeTaskId === row.id}
+                >
+                  <td className="tasks-table__title-cell">
+                    <button
+                      type="button"
+                      className="tasks-table__row-button"
+                      onClick={() => {
+                        setActiveTaskId(row.id);
+                        row.onSelect();
+                      }}
                     >
-                      <div className="tasks-item__actions" aria-label="Task actions">
-                        <button
-                          type="button"
-                          className="inbox-action"
-                          onClick={() => setPendingDeleteTask({ id: row.id, title: row.title })}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <aside
-            className={`task-detail-panel ${selectedRow ? "is-open" : ""}`}
-            aria-label="Task detail"
-            aria-hidden={selectedRow ? undefined : true}
-          >
-            {selectedRow ? (
-              <div className="task-detail-pane__content">
-                <h2 className="task-detail-pane__title">{selectedRow.title}</h2>
-                <p className="task-detail-pane__meta">
-                  {labelForCompletion(selectedRow.isCompleted)} • {selectedRow.project}
-                </p>
-                {selectedTask ? (
-                  <TaskDescriptionEditor
-                    value={selectedTask.content}
-                    onChange={(content) => onUpdateTask(selectedTask.id, { content })}
-                  />
-                ) : (
-                  <p className="task-detail-pane__meta">
-                    Markdown editing is available for saved tasks.
-                  </p>
-                )}
-              </div>
-            ) : null}
-          </aside>
+                      <span
+                        className={`tasks-table__marker tasks-table__marker--${
+                          row.isCompleted ? "done" : "inbox"
+                        }`}
+                      />
+                      <span>{row.title}</span>
+                    </button>
+                  </td>
+                  <td>{labelForCompletion(row.isCompleted)}</td>
+                  <td>{row.priority}</td>
+                  <td>{row.due}</td>
+                  <td>{row.project}</td>
+                  <td className="tasks-table__actions-cell">
+                    <div className="tasks-item__actions" aria-label="Task actions">
+                      <button
+                        type="button"
+                        className="inbox-action"
+                        onClick={() => setPendingDeleteTask({ id: row.id, title: row.title })}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : (
         <EmptyState
@@ -200,81 +242,6 @@ export function TasksPage({
 
 function labelForCompletion(isCompleted: boolean) {
   return isCompleted ? "Completed" : "Open";
-}
-
-const taskDescriptionExtensions = [
-  vim(),
-  markdown(),
-  EditorView.lineWrapping,
-  EditorView.theme({
-    "&": {
-      backgroundColor: "transparent",
-      color: "var(--color-text-primary)",
-      fontFamily: "inherit",
-      fontSize: "0.95rem",
-      lineHeight: "1.6",
-    },
-    ".cm-editor": {
-      backgroundColor: "transparent",
-    },
-    ".cm-scroller": {
-      fontFamily: "inherit",
-    },
-    ".cm-content": {
-      minHeight: "18rem",
-      padding: "0",
-      caretColor: "var(--color-text-primary)",
-    },
-    ".cm-line": {
-      padding: "0",
-    },
-    ".cm-gutters": {
-      display: "none",
-    },
-    ".cm-focused": {
-      outline: "none",
-    },
-    ".cm-cursor, .cm-dropCursor": {
-      backgroundColor: "var(--color-text-primary)",
-      width: "2px",
-    },
-    ".cm-fat-cursor, .cm-fat-cursor-mark": {
-      backgroundColor: "var(--color-text-primary)",
-      color: "var(--color-main-bg)",
-    },
-  }),
-];
-
-ensureTaskPanelVimBindings();
-
-function TaskDescriptionEditor({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="task-description-editor">
-      <p className="task-description-editor__label">Description</p>
-      <CodeMirror
-        value={value}
-        aria-label="Task description"
-        className="task-description-editor__surface"
-        placeholder="Write in markdown"
-        extensions={taskDescriptionExtensions}
-        basicSetup={{
-          lineNumbers: false,
-          foldGutter: false,
-          dropCursor: false,
-          allowMultipleSelections: false,
-          highlightActiveLine: false,
-          highlightActiveLineGutter: false,
-        }}
-        onChange={onChange}
-      />
-    </div>
-  );
 }
 
 function TaskDeleteConfirmModal({

@@ -21,7 +21,13 @@ export function NewTaskModal({
   }>;
   initialGoalId?: string;
   projects: Array<{ id: string; name: string }>;
-  onSubmit: (task: { title: string; description: string; projectId: string; goalId: string }) => void;
+  onSubmit: (task: {
+    title: string;
+    description: string;
+    projectId: string;
+    goalId: string;
+    openDetailOnSuccess?: boolean;
+  }) => void;
 }) {
   const formRef = useRef<HTMLFormElement | null>(null);
   const [title, setTitle] = useState("");
@@ -59,6 +65,7 @@ export function NewTaskModal({
       description: description.trim(),
       goalId,
       projectId,
+      openDetailOnSuccess: true,
     });
   }
 

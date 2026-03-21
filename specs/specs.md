@@ -592,7 +592,7 @@ Initial support should focus on a small curated set of popular themes, such as:
 
 * Tokyo Night
 * Catppuccin
-* Gruvbox
+* Rozejin
 * Nord
 * Dracula
 * One Dark

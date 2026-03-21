@@ -150,15 +150,70 @@ describe("ui consistency", () => {
   it("keeps left-rail active backgrounds inside a right gutter", () => {
     const journalList = getCssBlock(".journal-nav__list");
     const goalsList = getCssBlock(".goals-rail__list");
-    const projectsList = getCssBlock(".projects-rail__list");
 
     expect(journalList).toContain("padding-right: 0.5rem;");
     expect(goalsList).toContain("padding-right: 0.5rem;");
-    expect(projectsList).toContain("padding-right: 0.5rem;");
 
     expect(journalList).not.toMatch(/margin-right:\s*-/);
     expect(goalsList).not.toMatch(/margin-right:\s*-/);
-    expect(projectsList).not.toMatch(/margin-right:\s*-/);
+  });
+
+  it("lets project board lanes stretch to the full page height", () => {
+    const projectsBoardMain = getCssBlock(".projects-board-main");
+    const projectsBoard = getCssBlock(".projects-board");
+    const projectsBoardLane = getCssBlock(".projects-board-lane");
+
+    expect(projectsBoardMain).toContain("flex: 1;");
+    expect(projectsBoard).toContain("flex: 1;");
+    expect(projectsBoard).toContain("grid-auto-rows: minmax(0, 1fr);");
+    expect(projectsBoard).toContain("gap: 2.25rem;");
+    expect(projectsBoardLane).toContain("height: 100%;");
+    expect(projectsBoardLane).toContain("background: transparent;");
+  });
+
+  it("keeps equal breathing room above and below the project board title", () => {
+    const projectsBoardHeaderTitle = getCssBlock(".projects-board-header__title");
+    const projectsBoardHeaderCopy = getCssBlock(".projects-board-header__copy");
+    const projectsBoardLane = getCssBlock(".projects-board-lane");
+
+    expect(projectsBoardHeaderTitle).toContain("margin-top: 0.9rem;");
+    expect(projectsBoardHeaderCopy).toContain("margin-top: 0.9rem;");
+    expect(projectsBoardLane).toContain("padding: 0.9rem 0 0;");
+  });
+
+  it("shows project board focus through the heading dot and the focused task card instead of the lane shell", () => {
+    const projectsBoardLane = getCssBlock(".projects-board-lane");
+    const focusedProjectLaneOutline = getCssBlock(".projects-board-lane:focus-visible");
+    const projectsBoardCard = getCssBlock(".projects-board-card");
+    const focusedProjectBoardCard = getCssBlock(".projects-board-card.is-focused");
+    const focusDot = getCssBlock(".projects-board-lane__focus-dot");
+    const cardTimestamp = getCssBlock(".projects-board-card__timestamp");
+
+    expect(projectsBoardLane).not.toContain("border:");
+    expect(projectsBoardLane).toContain("background: transparent;");
+    expect(focusedProjectLaneOutline).toContain("outline: none;");
+    expect(projectsBoardCard).toContain("background: var(--color-surface-elevated);");
+    expect(focusedProjectBoardCard).toContain("border: 2px solid var(--color-active-bg);");
+    expect(focusDot).toContain("background: var(--color-accent);");
+    expect(cardTimestamp).toContain("font-size: 0.62rem;");
+    expect(cardTimestamp).toContain("font-weight: 400;");
+    expect(cardTimestamp).toContain("margin-bottom: 0.2rem;");
+  });
+
+  it("suppresses browser focus outlines on custom active controls that already have their own focus styling", () => {
+    const navButtonFocus = getCssBlock(".nav-button:focus-visible");
+    const tasksFilterFocus = getCssBlock(".tasks-filter:focus-visible");
+    const settingsNavButtonFocus = getCssBlock(".settings-nav__button:focus-visible");
+    const themeCardFocus = getCssBlock(".theme-card:focus-visible");
+    const newTaskChoiceFocus = getCssBlock(".new-task__project-choice:focus-visible");
+    const newGoalChoiceFocus = getCssBlock(".new-goal__choice:focus-visible");
+
+    expect(navButtonFocus).toContain("outline: none;");
+    expect(tasksFilterFocus).toContain("outline: none;");
+    expect(settingsNavButtonFocus).toContain("outline: none;");
+    expect(themeCardFocus).toContain("outline: none;");
+    expect(newTaskChoiceFocus).toContain("outline: none;");
+    expect(newGoalChoiceFocus).toContain("outline: none;");
   });
 
   it("does not use ad hoc inline border or shadow styles in feature components", () => {

@@ -39,9 +39,7 @@ describe("TasksPage", () => {
           createItem({ id: "task-2", title: "Completed task", isCompleted: true }),
         ]}
         projects={[] as Project[]}
-        selectedTaskId=""
         onSelectTask={vi.fn()}
-        onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
       />,
     );
@@ -56,5 +54,60 @@ describe("TasksPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Completed" }));
     expect(screen.getByText("Completed task")).toBeInTheDocument();
     expect(screen.queryByText("Open task")).not.toBeInTheDocument();
+  });
+
+  it("moves the active task selection with j k and arrow keys only", () => {
+    render(
+      <TasksPage
+        items={[
+          createItem({ id: "task-1", title: "First task" }),
+          createItem({ id: "task-2", title: "Second task" }),
+          createItem({ id: "task-3", title: "Third task" }),
+        ]}
+        projects={[] as Project[]}
+        onSelectTask={vi.fn()}
+        onDeleteTask={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("row", { name: /First task/i })).toHaveClass("is-active");
+
+    fireEvent.keyDown(window, { key: "j" });
+    expect(screen.getByRole("row", { name: /Second task/i })).toHaveClass("is-active");
+
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    expect(screen.getByRole("row", { name: /Third task/i })).toHaveClass("is-active");
+
+    fireEvent.keyDown(window, { key: "k" });
+    expect(screen.getByRole("row", { name: /Second task/i })).toHaveClass("is-active");
+
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    expect(screen.getByRole("row", { name: /First task/i })).toHaveClass("is-active");
+
+    fireEvent.keyDown(window, { key: "x" });
+    expect(screen.getByRole("row", { name: /First task/i })).toHaveClass("is-active");
+  });
+
+  it("opens the currently selected task with Enter", () => {
+    const onSelectTask = vi.fn();
+
+    render(
+      <TasksPage
+        items={[
+          createItem({ id: "task-1", title: "First task" }),
+          createItem({ id: "task-2", title: "Second task" }),
+        ]}
+        projects={[] as Project[]}
+        onSelectTask={onSelectTask}
+        onDeleteTask={vi.fn()}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "j" });
+    expect(screen.getByRole("row", { name: /Second task/i })).toHaveClass("is-active");
+
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    expect(onSelectTask).toHaveBeenCalledWith("task-2");
   });
 });

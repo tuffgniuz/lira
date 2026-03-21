@@ -83,21 +83,43 @@ export function CommandPalette({
     setHighlightedIndex(0);
   }
 
+  function moveHighlightedIndex(offset: 1 | -1) {
+    setHighlightedIndex((current) =>
+      filteredItems.length === 0
+        ? 0
+        : (current + offset + filteredItems.length) % filteredItems.length,
+    );
+  }
+
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "ArrowDown") {
+    const loweredKey = event.key.toLowerCase();
+    const moveNext =
+      event.key === "ArrowDown" ||
+      (!event.metaKey && !event.altKey && event.ctrlKey && loweredKey === "n") ||
+      (!event.metaKey && !event.altKey && !event.ctrlKey && event.key === "Tab" && !event.shiftKey);
+    const movePrevious =
+      event.key === "ArrowUp" ||
+      (!event.metaKey && !event.altKey && event.ctrlKey && loweredKey === "p") ||
+      (!event.metaKey && !event.altKey && !event.ctrlKey && event.key === "Tab" && event.shiftKey);
+
+    if (moveNext) {
       event.preventDefault();
-      setHighlightedIndex((current) =>
-        filteredItems.length === 0 ? 0 : (current + 1) % filteredItems.length,
-      );
+      if (event.key === "Tab") {
+        event.stopPropagation();
+        inputRef.current?.focus();
+      }
+      moveHighlightedIndex(1);
+      return;
     }
 
-    if (event.key === "ArrowUp") {
+    if (movePrevious) {
       event.preventDefault();
-      setHighlightedIndex((current) =>
-        filteredItems.length === 0
-          ? 0
-          : (current - 1 + filteredItems.length) % filteredItems.length,
-      );
+      if (event.key === "Tab") {
+        event.stopPropagation();
+        inputRef.current?.focus();
+      }
+      moveHighlightedIndex(-1);
+      return;
     }
 
     if (event.key === "Enter") {

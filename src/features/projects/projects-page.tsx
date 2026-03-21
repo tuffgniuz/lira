@@ -1,294 +1,489 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeftIcon, ColumnsIcon, FocusModeIcon, SettingsIcon } from "../../app/icons";
-import { RightRailColumn } from "../../components/right-rail-column";
-import { ThreeColumnLayout } from "../../components/three-column-layout";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionBar } from "../../components/ui/action-bar";
 import { EmptyState } from "../../components/ui/empty-state";
 import { FormField } from "../../components/ui/form-field";
 import { Modal } from "../../components/ui/modal";
 import { PageShell } from "../../components/ui/page-shell";
-import { useWindowWidth } from "../../hooks/use-window-width";
+import { formatRelativeTimestamp } from "../../lib/format-relative-timestamp";
+import { createProjectBoardLaneId, defaultProjectBoardLanes } from "../../models/project-board";
+import type { ProjectBoardLane } from "../../models/project-board";
 import type { Item } from "../../models/workspace-item";
-import type { JournalEntrySummary } from "../../models/journal";
 import type { Project } from "../../models/project";
+
+type ProjectsPageProps = {
+  projects: Project[];
+  items: Item[];
+  selectedProjectId: string;
+  onUpdateProject: (projectId: string, updates: Partial<Project>) => void;
+  onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
+  onCreateTask: (task: {
+    title: string;
+    description: string;
+    projectId: string;
+    goalId: string;
+    projectLaneId?: string;
+    openDetailOnSuccess?: boolean;
+  }) => string | undefined;
+  onSelectTask: (taskId: string) => void;
+};
 
 export function ProjectsPage({
   projects,
   items,
-  journalSummaries,
-  todayDate,
   selectedProjectId,
-  onSelectProject,
   onUpdateProject,
-  onDeleteProject,
-}: {
-  projects: Project[];
-  items: Item[];
-  journalSummaries: JournalEntrySummary[];
-  todayDate: string;
-  selectedProjectId: string;
-  onSelectProject: (projectId: string) => void;
-  onUpdateProject: (projectId: string, updates: Partial<Project>) => void;
-  onDeleteProject: (projectId: string) => void;
-}) {
-  const windowWidth = useWindowWidth();
-  const [layoutMode, setLayoutMode] = useState<"columns" | "full">("full");
-  const [detailMode, setDetailMode] = useState<"overview" | "settings">("overview");
-  const [nameDraft, setNameDraft] = useState("");
-  const [descriptionDraft, setDescriptionDraft] = useState("");
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleteConfirmationValue, setDeleteConfirmationValue] = useState("");
-
+  onUpdateTask,
+  onCreateTask,
+  onSelectTask,
+}: ProjectsPageProps) {
+  const [newLaneName, setNewLaneName] = useState("");
+  const [laneModalOpen, setLaneModalOpen] = useState(false);
+  const [draggingTaskId, setDraggingTaskId] = useState("");
+  const [activeLaneId, setActiveLaneId] = useState("");
+  const [activeTaskId, setActiveTaskId] = useState("");
+  const [pendingFocusedTaskId, setPendingFocusedTaskId] = useState("");
+  const [draftTaskLaneId, setDraftTaskLaneId] = useState("");
+  const [draftTaskTitle, setDraftTaskTitle] = useState("");
+  const laneRefs = useRef(new Map<string, HTMLElement>());
   const selectedProject =
     projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
-  const isExpandedLayout = layoutMode === "full" || detailMode === "settings";
-  const responsiveMode = resolveResponsiveMode(windowWidth);
-  const showInlineRail = responsiveMode !== "wide";
-  const showStackedContext = responsiveMode === "narrow";
-  const showRightRailInColumns = !isExpandedLayout && responsiveMode !== "narrow";
 
-  useEffect(() => {
-    if (detailMode === "settings") {
-      setLayoutMode("full");
+  const boardLanes = selectedProject?.boardLanes.length
+    ? selectedProject.boardLanes
+    : selectedProject
+      ? defaultProjectBoardLanes(selectedProject.id)
+      : [];
+
+  const projectTasks = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          item.kind === "task" &&
+          item.projectId === selectedProject?.id &&
+          item.state !== "deleted",
+      ),
+    [items, selectedProject?.id],
+  );
+
+  const laneGroups = useMemo(() => {
+    const defaultLaneId = boardLanes[0]?.id;
+    const initialGroups = new Map(boardLanes.map((lane) => [lane.id, [] as Item[]]));
+
+    for (const task of projectTasks) {
+      const laneId =
+        task.projectLaneId && initialGroups.has(task.projectLaneId)
+          ? task.projectLaneId
+          : defaultLaneId;
+
+      if (!laneId) {
+        continue;
+      }
+
+      initialGroups.get(laneId)?.push(task);
     }
-  }, [detailMode]);
+
+    for (const group of initialGroups.values()) {
+      group.sort((left, right) => {
+        const createdComparison = right.createdAt.localeCompare(left.createdAt);
+
+        if (createdComparison !== 0) {
+          return createdComparison;
+        }
+
+        return right.updatedAt.localeCompare(left.updatedAt);
+      });
+    }
+
+    return initialGroups;
+  }, [boardLanes, projectTasks]);
+
+  const activeLaneTasks = useMemo(
+    () => laneGroups.get(activeLaneId) ?? [],
+    [activeLaneId, laneGroups],
+  );
 
   useEffect(() => {
-    if (!selectedProject) {
-      setDetailMode("overview");
-      setDeleteConfirmOpen(false);
-      setDeleteConfirmationValue("");
+    if (!boardLanes.length) {
+      setActiveLaneId("");
+      setDraftTaskLaneId("");
+      setActiveTaskId("");
       return;
     }
 
-    setNameDraft(selectedProject.name);
-    setDescriptionDraft(selectedProject.description);
-    setDeleteConfirmationValue("");
-  }, [selectedProject]);
+    if (!boardLanes.some((lane) => lane.id === activeLaneId)) {
+      setActiveLaneId(boardLanes[0].id);
+    }
+  }, [activeLaneId, boardLanes]);
 
-  const projectListMeta = useMemo(() => {
-    return new Map(
-      projects.map((project) => {
-        const projectTasks = items.filter(
-          (item) =>
-            item.kind === "task" &&
-            item.projectId === project.id &&
-            item.state !== "deleted",
+  useEffect(() => {
+    if (!activeLaneId) {
+      setActiveTaskId("");
+      return;
+    }
+
+    if (!activeLaneTasks.length) {
+      setActiveTaskId("");
+      return;
+    }
+
+    if (
+      pendingFocusedTaskId &&
+      activeLaneTasks.some((task) => task.id === pendingFocusedTaskId)
+    ) {
+      setActiveTaskId(pendingFocusedTaskId);
+      setPendingFocusedTaskId("");
+      return;
+    }
+
+    if (!activeLaneTasks.some((task) => task.id === activeTaskId)) {
+      setActiveTaskId(activeLaneTasks[0].id);
+    }
+  }, [activeLaneId, activeLaneTasks, activeTaskId, pendingFocusedTaskId]);
+
+  useEffect(() => {
+    if (!activeLaneId || laneModalOpen) {
+      return;
+    }
+
+    const lane = laneRefs.current.get(activeLaneId);
+
+    if (!lane) {
+      return;
+    }
+
+    lane.focus();
+    if (typeof lane.scrollIntoView === "function") {
+      lane.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    }
+  }, [activeLaneId, laneModalOpen]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (laneModalOpen || !boardLanes.length) {
+        return;
+      }
+
+      const target = event.target;
+      const isTypingTarget =
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable ||
+          target.getAttribute("contenteditable") === "true" ||
+          target.closest("[contenteditable]") !== null);
+
+      if (isTypingTarget || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      if (draftTaskLaneId) {
+        return;
+      }
+
+      if (event.key === "n") {
+        if (!activeLaneId) {
+          return;
+        }
+
+        event.preventDefault();
+        setDraftTaskLaneId(activeLaneId);
+        setDraftTaskTitle("");
+        return;
+      }
+
+      if (event.key === "Enter") {
+        if (!activeTaskId) {
+          return;
+        }
+
+        event.preventDefault();
+        onSelectTask(activeTaskId);
+        return;
+      }
+
+      if ((event.key === "j" || event.key === "k") && activeLaneTasks.length) {
+        event.preventDefault();
+
+        const currentIndex = activeLaneTasks.findIndex((task) => task.id === activeTaskId);
+        const startIndex = currentIndex >= 0 ? currentIndex : 0;
+        const offset = event.key === "j" ? 1 : -1;
+        const nextIndex = Math.max(
+          0,
+          Math.min(activeLaneTasks.length - 1, startIndex + offset),
         );
+        setActiveTaskId(activeLaneTasks[nextIndex].id);
+        return;
+      }
 
-        return [
-          project.id,
-          {
-            taskCount: projectTasks.length,
-            activityLabel: getProjectActivityLabel(project),
-          },
-        ];
-      }),
+      const isPreviousLaneMotion =
+        event.key === "h" ||
+        event.key === "ArrowLeft" ||
+        (event.key === "Tab" && event.shiftKey);
+      const isNextLaneMotion =
+        event.key === "l" ||
+        event.key === "ArrowRight" ||
+        (event.key === "Tab" && !event.shiftKey);
+
+      if (!isPreviousLaneMotion && !isNextLaneMotion) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const currentIndex = boardLanes.findIndex((lane) => lane.id === activeLaneId);
+      const startIndex = currentIndex >= 0 ? currentIndex : 0;
+      const offset = isPreviousLaneMotion ? -1 : 1;
+      const nextIndex = (startIndex + offset + boardLanes.length) % boardLanes.length;
+      setActiveLaneId(boardLanes[nextIndex].id);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    activeLaneId,
+    activeLaneTasks,
+    activeTaskId,
+    boardLanes,
+    draftTaskLaneId,
+    laneModalOpen,
+    onSelectTask,
+  ]);
+
+  if (!selectedProject) {
+    return (
+      <EmptyState
+        className="projects-empty"
+        badge="Projects"
+        title="No projects yet"
+        copy="Use `Space n p` to create your first project."
+      />
     );
-  }, [items, projects]);
+  }
+
+  function handleCreateLane() {
+    const trimmedName = newLaneName.trim();
+
+    if (!trimmedName) {
+      return;
+    }
+
+    const nextLane: ProjectBoardLane = {
+      id: createProjectBoardLaneId(selectedProject.id, trimmedName),
+      name: trimmedName,
+      order: boardLanes.length,
+    };
+
+    onUpdateProject(selectedProject.id, {
+      boardLanes: [...boardLanes, nextLane],
+    });
+    setNewLaneName("");
+    setLaneModalOpen(false);
+  }
+
+  function handleSubmitDraftTask() {
+    const trimmedTitle = draftTaskTitle.trim();
+
+    if (!trimmedTitle || !selectedProject || !draftTaskLaneId) {
+      return;
+    }
+
+    const createdTaskId = onCreateTask({
+      title: trimmedTitle,
+      description: "",
+      goalId: "",
+      projectId: selectedProject.id,
+      projectLaneId: draftTaskLaneId,
+      openDetailOnSuccess: false,
+    });
+    setActiveLaneId(draftTaskLaneId);
+    if (createdTaskId) {
+      setPendingFocusedTaskId(createdTaskId);
+      setActiveTaskId(createdTaskId);
+    }
+    setDraftTaskTitle("");
+    setDraftTaskLaneId("");
+  }
 
   return (
-    <PageShell ariaLabel="Projects" className="page--projects">
-      {projects.length > 0 && selectedProject ? (
-        <>
-          <ThreeColumnLayout
-            className={`projects-layout ${isExpandedLayout ? "is-full-width" : ""}`}
-            leftClassName="projects-rail"
-            centerClassName="projects-detail"
-            rightClassName="projects-context"
-            centerOnly={isExpandedLayout && !showInlineRail && !showStackedContext}
-            leftCollapsed={isExpandedLayout || showInlineRail}
-            rightCollapsed={isExpandedLayout || !showRightRailInColumns}
-            leftLabel="Projects list"
-            centerLabel="Project details"
-            rightLabel="Project stats"
-            left={
-              <ProjectRailList
-                projects={projects}
-                selectedProjectId={selectedProject.id}
-                projectListMeta={projectListMeta}
-                onSelectProject={onSelectProject}
-              />
-            }
-            center={
-              <>
-                {detailMode === "settings" ? (
-                  <header className="projects-detail__header projects-detail__header--settings">
-                    <h1 className="projects-detail__title">Settings</h1>
-                  </header>
-                ) : (
-                  <>
-                    <header className="projects-detail__header">
-                      <div className="projects-detail__heading">
-                        <p className="page__eyebrow">Project</p>
-                        <h1 className="projects-detail__title">{selectedProject.name}</h1>
-                      </div>
-                      {showInlineRail ? (
-                        <div className="projects-inline-rail" data-testid="projects-inline-rail">
-                          <ProjectRailList
-                            projects={projects}
-                            selectedProjectId={selectedProject.id}
-                            projectListMeta={projectListMeta}
-                            onSelectProject={onSelectProject}
-                            inline
-                          />
-                        </div>
-                      ) : null}
-                    </header>
-                    <p className="projects-detail__description">
-                      {selectedProject.description || "No description yet."}
-                    </p>
-                  </>
-                )}
-                {detailMode === "settings" ? (
-                  <section
-                    className="projects-settings projects-settings--centered"
-                    aria-label="Project settings"
-                  >
-                    <button
-                      type="button"
-                      className="projects-detail__icon-button projects-detail__icon-button--back"
-                      aria-label="Back to project overview"
-                      onClick={() => setDetailMode("overview")}
-                    >
-                      <ArrowLeftIcon className="projects-detail__layout-toggle-icon" />
-                    </button>
-                    <FormField label="Name" className="projects-settings__field">
-                      <input
-                        className="projects-settings__input ui-input"
-                        value={nameDraft}
-                        onChange={(event) => setNameDraft(event.target.value)}
-                      />
-                    </FormField>
-                    <FormField label="Description" className="projects-settings__field">
-                      <textarea
-                        className="projects-settings__textarea ui-input"
-                        value={descriptionDraft}
-                        onChange={(event) => setDescriptionDraft(event.target.value)}
-                      />
-                    </FormField>
-                    <ActionBar className="projects-settings__actions">
-                      <button
-                        type="button"
-                        className="projects-settings__button"
-                        onClick={() =>
-                          onUpdateProject(selectedProject.id, {
-                            name: nameDraft,
-                            description: descriptionDraft,
-                          })
-                        }
-                      >
-                        Save changes
-                      </button>
-                      <button
-                        type="button"
-                        className="projects-settings__button projects-settings__button--danger"
-                        onClick={() => setDeleteConfirmOpen(true)}
-                      >
-                        Remove project
-                      </button>
-                    </ActionBar>
-                  </section>
-                ) : (
-                  <div className="projects-detail__actions">
-                    <button
-                      type="button"
-                      className="projects-detail__icon-button"
-                      aria-label="Show project settings"
-                      onClick={() => setDetailMode("settings")}
-                    >
-                      <SettingsIcon className="projects-detail__layout-toggle-icon" />
-                    </button>
-                    <button
-                      type="button"
-                      className="projects-detail__icon-button"
-                      aria-label={
-                        layoutMode === "columns"
-                          ? "Show project detail in full width"
-                          : "Show project detail in three-column layout"
-                      }
-                      onClick={() =>
-                        setLayoutMode((current) => (current === "columns" ? "full" : "columns"))
-                      }
-                    >
-                      {layoutMode === "columns" ? (
-                        <FocusModeIcon className="projects-detail__layout-toggle-icon" />
-                      ) : (
-                        <ColumnsIcon className="projects-detail__layout-toggle-icon" />
-                      )}
-                    </button>
-                  </div>
-                )}
-              </>
-            }
-            right={
-              <RightRailColumn items={items} journalSummaries={journalSummaries} todayDate={todayDate} />
-            }
-          />
-          {showStackedContext ? (
-            <section
-              className="projects-stacked-context"
-              aria-label="Project stats"
-              data-testid="projects-stacked-context"
+    <PageShell ariaLabel="Projects" className="page--projects-board">
+      <div className="projects-board-main">
+        <header className="projects-board-header">
+          <div>
+            <p className="page__eyebrow">Project board</p>
+            <h1 className="projects-board-header__title">{selectedProject.name}</h1>
+            <p className="projects-board-header__copy">
+              {selectedProject.description || "No description yet."}
+            </p>
+          </div>
+          <ActionBar className="projects-board-header__actions">
+            <button
+              type="button"
+              className="projects-board-header__button"
+              onClick={() => setLaneModalOpen(true)}
             >
-              <RightRailColumn items={items} journalSummaries={journalSummaries} todayDate={todayDate} />
+              Add lane
+            </button>
+          </ActionBar>
+        </header>
+
+        <div className="projects-board" aria-label={`${selectedProject.name} board`}>
+          {boardLanes.map((lane) => (
+            <section
+              key={lane.id}
+              ref={(element) => {
+                if (element) {
+                  laneRefs.current.set(lane.id, element);
+                } else {
+                  laneRefs.current.delete(lane.id);
+                }
+              }}
+              className={`projects-board-lane ${
+                activeLaneId === lane.id ? "is-focused" : ""
+              } ${draggingTaskId ? "is-drop-ready" : ""}`.trim()}
+              aria-label={`${lane.name} lane`}
+              tabIndex={activeLaneId === lane.id ? 0 : -1}
+              onFocus={() => setActiveLaneId(lane.id)}
+              onMouseDown={() => setActiveLaneId(lane.id)}
+              onDragOver={(event) => {
+                event.preventDefault();
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const taskId = event.dataTransfer.getData("text/plain") || draggingTaskId;
+
+                if (!taskId) {
+                  return;
+                }
+
+                onUpdateTask(taskId, { projectLaneId: lane.id });
+                setDraggingTaskId("");
+              }}
+            >
+              <header className="projects-board-lane__header">
+                <div className="projects-board-lane__heading">
+                  <h2 className="projects-board-lane__title">{lane.name}</h2>
+                  {activeLaneId === lane.id ? (
+                    <span className="projects-board-lane__focus-dot" aria-hidden="true" />
+                  ) : null}
+                </div>
+                <span className="projects-board-lane__count">
+                  {laneGroups.get(lane.id)?.length ?? 0}
+                </span>
+              </header>
+
+              <div className="projects-board-lane__cards">
+                {draftTaskLaneId === lane.id ? (
+                  <form
+                    className="projects-board-card projects-board-card--draft"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      handleSubmitDraftTask();
+                    }}
+                  >
+                    <input
+                      className="projects-board-card__input"
+                      aria-label="New task title"
+                      placeholder="New task"
+                      value={draftTaskTitle}
+                      autoFocus
+                      onChange={(event) => setDraftTaskTitle(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          handleSubmitDraftTask();
+                          return;
+                        }
+
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setDraftTaskTitle("");
+                          setDraftTaskLaneId("");
+                          setActiveLaneId(lane.id);
+                        }
+                      }}
+                    />
+                  </form>
+                ) : null}
+                {(laneGroups.get(lane.id) ?? []).map((task) => (
+                  <article
+                    key={task.id}
+                    className={`projects-board-card ${
+                      activeLaneId === lane.id && activeTaskId === task.id ? "is-focused" : ""
+                    }`.trim()}
+                    aria-label={`Task card ${task.title}`}
+                    draggable
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData("text/plain", task.id);
+                      setDraggingTaskId(task.id);
+                    }}
+                    onDragEnd={() => setDraggingTaskId("")}
+                  >
+                    <p className="projects-board-card__timestamp">
+                      {formatTaskTimestampLabel(task)}
+                    </p>
+                    <p className="projects-board-card__title">{task.title}</p>
+                    {task.content.trim() ? (
+                      <p className="projects-board-card__copy">{task.content}</p>
+                    ) : null}
+                    {task.priority || task.dueDate ? (
+                      <div className="projects-board-card__meta" aria-label="Task metadata">
+                        {task.priority ? (
+                          <span className="projects-board-card__meta-item">
+                            {task.priority.toUpperCase()}
+                          </span>
+                        ) : null}
+                        {task.dueDate ? (
+                          <span className="projects-board-card__meta-item">
+                            {`DUE ${task.dueDate}`}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
             </section>
-          ) : null}
-        </>
-      ) : (
-        <EmptyState
-          className="projects-empty"
-          badge="Projects"
-          title="No projects yet"
-          copy="Use `Space n p` to create your first project."
-        />
-      )}
-      {selectedProject && deleteConfirmOpen ? (
+          ))}
+        </div>
+      </div>
+
+      {laneModalOpen ? (
         <Modal
-          ariaLabelledBy="delete-project-title"
+          ariaLabelledBy="create-project-lane-title"
           className="confirm-panel"
           onClose={() => {
-            setDeleteConfirmOpen(false);
-            setDeleteConfirmationValue("");
+            setLaneModalOpen(false);
+            setNewLaneName("");
           }}
         >
           <div className="confirm-panel__content">
-            <p id="delete-project-title" className="confirm-panel__title">
-              Remove project
+            <p id="create-project-lane-title" className="confirm-panel__title">
+              Add lane
             </p>
-            <p className="confirm-panel__copy">
-              Type <strong>{selectedProject.name}</strong> to confirm permanent deletion.
-            </p>
-            <input
-              className="confirm-panel__input ui-input"
-              value={deleteConfirmationValue}
-              onChange={(event) => setDeleteConfirmationValue(event.target.value)}
-              placeholder={selectedProject.name}
-              autoFocus
-            />
+            <FormField label="Lane name">
+              <input
+                className="ui-input"
+                aria-label="Lane name"
+                value={newLaneName}
+                onChange={(event) => setNewLaneName(event.target.value)}
+              />
+            </FormField>
             <ActionBar className="confirm-panel__actions">
               <button
                 type="button"
                 className="confirm-panel__button"
-                onClick={() => {
-                  setDeleteConfirmOpen(false);
-                  setDeleteConfirmationValue("");
-                }}
+                onClick={handleCreateLane}
               >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="confirm-panel__button confirm-panel__button--danger"
-                disabled={deleteConfirmationValue !== selectedProject.name}
-                onClick={() => {
-                  onDeleteProject(selectedProject.id);
-                  setDeleteConfirmOpen(false);
-                  setDeleteConfirmationValue("");
-                  setDetailMode("overview");
-                }}
-              >
-                Delete
+                Create lane
               </button>
             </ActionBar>
           </div>
@@ -298,103 +493,11 @@ export function ProjectsPage({
   );
 }
 
-function ProjectRailList({
-  projects,
-  selectedProjectId,
-  projectListMeta,
-  onSelectProject,
-  inline = false,
-}: {
-  projects: Project[];
-  selectedProjectId: string;
-  projectListMeta: Map<string, { taskCount: number; activityLabel: string }>;
-  onSelectProject: (projectId: string) => void;
-  inline?: boolean;
-}) {
-  return (
-    <>
-      <div className="projects-rail__header">
-        <p className="page__eyebrow">Projects</p>
-      </div>
-      <div className={`projects-rail__list ${inline ? "projects-rail__list--inline" : ""}`.trim()}>
-        {projects.map((project) => {
-          const meta = projectListMeta.get(project.id) ?? {
-            taskCount: 0,
-            activityLabel: "created just now",
-          };
-
-          return (
-            <button
-              key={project.id}
-              type="button"
-              className={`projects-rail__item ${selectedProjectId === project.id ? "is-active" : ""} ${
-                inline ? "projects-rail__item--inline" : ""
-              }`.trim()}
-              onClick={() => onSelectProject(project.id)}
-            >
-              <span className="projects-rail__name">{project.name}</span>
-              <span className="projects-rail__description">
-                {formatTaskCount(meta.taskCount)} - {meta.activityLabel}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </>
+function formatTaskTimestampLabel(task: Item) {
+  const timestampPrefix = task.updatedAt !== task.createdAt ? "UPDATED" : "CREATED";
+  const timestampValue = formatRelativeTimestamp(
+    task.updatedAt !== task.createdAt ? task.updatedAt : task.createdAt,
   );
-}
 
-function resolveResponsiveMode(windowWidth: number): "wide" | "medium" | "narrow" {
-  if (windowWidth < 900) {
-    return "narrow";
-  }
-
-  if (windowWidth < 1280) {
-    return "medium";
-  }
-
-  return "wide";
-}
-
-function formatTaskCount(count: number) {
-  return `${count} ${count === 1 ? "task" : "tasks"}`;
-}
-
-function getProjectActivityLabel(project: Project) {
-  const hasUpdate = project.updatedAt && project.updatedAt !== project.createdAt;
-
-  if (hasUpdate) {
-    return `updated ${formatRelativeTimestamp(project.updatedAt)}`;
-  }
-
-  return `created ${formatRelativeTimestamp(project.createdAt)}`;
-}
-
-function formatRelativeTimestamp(value: string) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  const diffInSeconds = Math.round((date.getTime() - Date.now()) / 1000);
-  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
-    ["year", 60 * 60 * 24 * 365],
-    ["month", 60 * 60 * 24 * 30],
-    ["week", 60 * 60 * 24 * 7],
-    ["day", 60 * 60 * 24],
-    ["hour", 60 * 60],
-    ["minute", 60],
-    ["second", 1],
-  ];
-
-  for (const [unit, secondsPerUnit] of units) {
-    if (Math.abs(diffInSeconds) >= secondsPerUnit || unit === "second") {
-      const delta = Math.round(diffInSeconds / secondsPerUnit);
-      return rtf.format(delta, unit);
-    }
-  }
-
-  return value;
+  return `${timestampPrefix} ${timestampValue.toUpperCase()}`;
 }

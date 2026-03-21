@@ -7,8 +7,8 @@ use persistence::journal_repository::JournalRepository;
 use persistence::models::{
     Capture, CaptureLifecycleStatus, CaptureTriageStatus, EntityTag, Goal, GoalProgressEntry,
     GoalStatus, GoalTrackingMode, GoalType, JournalCommitment, JournalCommitmentStatus,
-    JournalEntry, JournalEntrySummary, Project, ProjectStatus, Relationship, Tag, Task,
-    TaskLifecycleStatus, TaskQuery, TaskScheduleBucket, UserProfile,
+    JournalEntry, JournalEntrySummary, Project, ProjectBoardLane, ProjectStatus, Relationship,
+    Tag, Task, TaskLifecycleStatus, TaskQuery, TaskScheduleBucket, UserProfile,
 };
 use persistence::project_repository::ProjectRepository;
 use persistence::relationship_repository::RelationshipRepository;
@@ -36,6 +36,8 @@ struct WorkspaceItemDto {
     tags: Vec<String>,
     #[serde(default)]
     project_id: Option<String>,
+    #[serde(default)]
+    project_lane_id: Option<String>,
     #[serde(default)]
     project: String,
     #[serde(default)]
@@ -130,8 +132,18 @@ struct ProjectDto {
     id: String,
     name: String,
     description: String,
+    #[serde(default)]
+    board_lanes: Vec<ProjectBoardLaneDto>,
     created_at: String,
     updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectBoardLaneDto {
+    id: String,
+    name: String,
+    order: i64,
 }
 
 #[tauri::command]
@@ -439,6 +451,7 @@ fn workspace_item_from_capture(capture: Capture) -> WorkspaceItemDto {
         updated_at: capture.updated_at,
         tags: Vec::new(),
         project_id: capture.project_id,
+        project_lane_id: None,
         project: String::new(),
         is_completed: false,
         priority: String::new(),
@@ -472,6 +485,7 @@ fn workspace_item_from_task(task: Task) -> WorkspaceItemDto {
         updated_at: task.updated_at,
         tags: Vec::new(),
         project_id: task.project_id,
+        project_lane_id: task.project_lane_id,
         project: String::new(),
         is_completed: task.is_completed,
         priority: encode_workspace_priority(task.priority),
@@ -526,6 +540,7 @@ fn workspace_item_from_goal(
         updated_at: goal.updated_at,
         tags: Vec::new(),
         project_id: None,
+        project_lane_id: None,
         project: String::new(),
         is_completed: false,
         priority: String::new(),
@@ -597,6 +612,7 @@ fn task_from_workspace_item(item: WorkspaceItemDto) -> Result<Task, String> {
         completed_at: empty_string_to_none(item.completed_at),
         estimate_minutes: item.estimate.parse::<i64>().ok(),
         project_id: item.project_id,
+        project_lane_id: item.project_lane_id,
         schedule_bucket: decode_task_schedule_bucket(item.schedule_bucket.as_deref(), &item.due_date)?,
         source_capture_id: item.source_capture_id,
         created_at: item.created_at,
@@ -891,6 +907,15 @@ fn project_dto_from_model(project: Project) -> ProjectDto {
         id: project.id,
         name: project.name,
         description: project.description.unwrap_or_default(),
+        board_lanes: project
+            .board_lanes
+            .into_iter()
+            .map(|lane| ProjectBoardLaneDto {
+                id: lane.id,
+                name: lane.name,
+                order: lane.order,
+            })
+            .collect(),
         created_at: project.created_at,
         updated_at: project.updated_at,
     }
@@ -902,6 +927,15 @@ fn project_from_dto(project: ProjectDto) -> Project {
         name: project.name,
         description: empty_string_to_none(project.description),
         status: ProjectStatus::Active,
+        board_lanes: project
+            .board_lanes
+            .into_iter()
+            .map(|lane| ProjectBoardLane {
+                id: lane.id,
+                name: lane.name,
+                order: lane.order,
+            })
+            .collect(),
         created_at: project.created_at,
         updated_at: project.updated_at,
     }
@@ -1120,7 +1154,7 @@ mod workspace_item_tests {
     };
     use crate::persistence::{
         database::Database,
-        models::{Project, ProjectStatus},
+        models::{Project, ProjectBoardLane, ProjectStatus},
         project_repository::ProjectRepository,
     };
     use serde_json::json;
@@ -1173,6 +1207,23 @@ mod workspace_item_tests {
                 name: "Kenchi".into(),
                 description: Some("Workspace".into()),
                 status: ProjectStatus::Active,
+                board_lanes: vec![
+                    ProjectBoardLane {
+                        id: "project-1-lane-to-do".into(),
+                        name: "To Do".into(),
+                        order: 0,
+                    },
+                    ProjectBoardLane {
+                        id: "project-1-lane-in-progress".into(),
+                        name: "In Progress".into(),
+                        order: 1,
+                    },
+                    ProjectBoardLane {
+                        id: "project-1-lane-done".into(),
+                        name: "Done".into(),
+                        order: 2,
+                    },
+                ],
                 created_at: "2026-03-17T07:00:00Z".into(),
                 updated_at: "2026-03-17T07:00:00Z".into(),
             })
@@ -1211,6 +1262,7 @@ mod workspace_item_tests {
                 "updatedAt": "2026-03-17T09:30:00Z",
                 "tags": ["deep-work", "review"],
                 "projectId": "project-1",
+                "projectLaneId": "project-1-lane-in-progress",
                 "project": "",
                 "isCompleted": false,
                 "priority": "high",
@@ -1270,6 +1322,10 @@ mod workspace_item_tests {
         assert_eq!(
             serde_json::to_value(task).expect("task should serialize")["sourceCaptureId"],
             json!("capture-1")
+        );
+        assert_eq!(
+            serde_json::to_value(task).expect("task should serialize")["projectLaneId"],
+            json!("project-1-lane-in-progress")
         );
         assert_eq!(goal.tags, vec!["quarterly"]);
         assert_eq!(

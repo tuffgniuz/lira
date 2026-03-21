@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Item } from "../../models/workspace-item";
 import type { Project } from "../../models/project";
+import { defaultProjectBoardLanes } from "../../models/project-board";
 import {
   attachProjectIdsFromNames,
   clearProjectReferences,
@@ -12,6 +13,7 @@ const projects: Project[] = [
     id: "project-1",
     name: "Alpha",
     description: "",
+    boardLanes: defaultProjectBoardLanes("project-1"),
     createdAt: "2026-03-16T00:00:00.000Z",
     updatedAt: "2026-03-16T00:00:00.000Z",
   },
@@ -19,6 +21,7 @@ const projects: Project[] = [
     id: "project-2",
     name: "Beta",
     description: "",
+    boardLanes: defaultProjectBoardLanes("project-2"),
     createdAt: "2026-03-16T00:00:00.000Z",
     updatedAt: "2026-03-16T00:00:00.000Z",
   },

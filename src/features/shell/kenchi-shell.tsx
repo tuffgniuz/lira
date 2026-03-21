@@ -27,6 +27,7 @@ import {
 } from "../../services/journal";
 import { loadProfile, saveProfile } from "../../services/profile";
 import { loadProjects, saveProjects } from "../../services/projects";
+import { updateTask as persistTaskUpdate, type PersistedTask } from "../../services/tasks";
 import { loadWorkspaceItems, replaceWorkspaceItems } from "../../services/workspace";
 import { initializeVault } from "../../services/vault";
 import {
@@ -45,6 +46,7 @@ import {
 import type { Item } from "../../models/workspace-item";
 import type { JournalEntry, JournalEntrySummary } from "../../models/journal";
 import type { Project } from "../../models/project";
+import { defaultProjectBoardLanes } from "../../models/project-board";
 import type { UserProfile } from "../../models/profile";
 import { NewGoalModal } from "../goals/new-goal-modal";
 import { NewProjectModal } from "../projects/new-project-modal";
@@ -58,55 +60,6 @@ import { QuickCaptureModal } from "../quick-capture/quick-capture-modal";
 import { SettingsModal } from "../settings/settings-modal";
 import { NewTaskModal } from "../tasks/new-task-modal";
 import { PageContent } from "./page-content";
-
-const defaultItems: Item[] = [
-  {
-    id: "item-task-example-1",
-    kind: "task",
-    state: "active",
-    sourceType: "manual",
-    title: "Design the first task workspace layout",
-    content:
-      "Validate the split list/detail approach before adding persistence or keyboard-specific interactions.",
-    createdAt: "today",
-    updatedAt: "today",
-    tags: ["ui", "planning"],
-    project: "Kenchi",
-    isCompleted: false,
-    priority: "high",
-    dueDate: "2026-03-18",
-    completedAt: "",
-    estimate: "45m",
-    goalMetric: "tasks_completed",
-    goalTarget: 1,
-    goalProgress: 0,
-    goalProgressByDate: {},
-    goalPeriod: "weekly",
-  },
-  {
-    id: "item-goal-example-1",
-    kind: "goal",
-    state: "active",
-    sourceType: "manual",
-    title: "Complete 3 tasks this week",
-    content: "Keep task throughput steady without turning goals into a second inbox.",
-    createdAt: "today",
-    updatedAt: "today",
-    tags: [],
-    project: "",
-    isCompleted: false,
-    priority: "",
-    dueDate: "",
-    completedAt: "",
-    estimate: "",
-    goalMetric: "tasks_completed",
-    goalTarget: 3,
-    goalProgress: 0,
-    goalProgressByDate: {},
-    goalPeriod: "weekly",
-    goalScope: undefined,
-  },
-];
 
 const defaultProfile: UserProfile = {
   name: "User",
@@ -131,6 +84,75 @@ function formatPersistenceError(context: string, error: unknown) {
         : "Unknown error";
 
   return `Failed to ${context}: ${detail}`;
+}
+
+function getCurrentTimestamp() {
+  return new Date().toISOString();
+}
+
+function taskPayloadFromWorkspaceItem(item: Item): PersistedTask {
+  return {
+    id: item.id,
+    title: item.title,
+    description: item.content.trim() ? item.content : null,
+    lifecycleStatus:
+      item.state === "archived" ? "archived" : item.state === "deleted" ? "deleted" : "active",
+    isCompleted: item.isCompleted,
+    scheduleBucket: item.scheduleBucket ?? (item.dueDate ? "today" : "none"),
+    priority:
+      item.priority === "low"
+        ? 1
+        : item.priority === "medium"
+          ? 2
+          : item.priority === "high"
+            ? 3
+            : item.priority === "urgent"
+              ? 4
+              : null,
+    dueAt: item.dueDate || null,
+    completedAt: item.completedAt || null,
+    estimateMinutes: item.estimate ? Number.parseInt(item.estimate, 10) || null : null,
+    projectId: item.projectId ?? null,
+    projectLaneId: item.projectLaneId ?? null,
+    sourceCaptureId: item.sourceCaptureId ?? null,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  };
+}
+
+function getDefaultProjectLaneId(projects: Project[], projectId?: string) {
+  if (!projectId) {
+    return undefined;
+  }
+
+  const project = projects.find((candidate) => candidate.id === projectId);
+  const laneFromProject = project?.boardLanes[0]?.id;
+
+  if (laneFromProject) {
+    return laneFromProject;
+  }
+
+  return defaultProjectBoardLanes(projectId)[0]?.id;
+}
+
+function isTypingTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (target.closest('[data-vim-mode="normal"]')) {
+    return false;
+  }
+
+  return (
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT" ||
+    target.isContentEditable ||
+    target.contentEditable === "true" ||
+    target.getAttribute("contenteditable") === "true" ||
+    target.closest("[contenteditable]") !== null
+  );
 }
 
 function createDefaultJournalEntry(date: string): JournalEntry {
@@ -186,6 +208,23 @@ function createDefaultJournalSummaries(todayDate: string): JournalEntrySummary[]
 }
 
 type ListPaletteKind = "projects" | "tasks" | "goals" | "inbox";
+type NavigationLocation = {
+  view: ViewId;
+  selectedProjectId: string;
+  selectedGoalId: string;
+  selectedTaskId: string;
+  selectedJournalDate: string;
+};
+
+function locationsMatch(left: NavigationLocation, right: NavigationLocation) {
+  return (
+    left.view === right.view &&
+    left.selectedProjectId === right.selectedProjectId &&
+    left.selectedGoalId === right.selectedGoalId &&
+    left.selectedTaskId === right.selectedTaskId &&
+    left.selectedJournalDate === right.selectedJournalDate
+  );
+}
 
 export function KenchiShell() {
   const {
@@ -220,14 +259,14 @@ export function KenchiShell() {
   const [loadedItemVaultPath, setLoadedItemVaultPath] = useState("");
   const [loadedJournalVaultPath, setLoadedJournalVaultPath] = useState("");
   const [loadedProjectVaultPath, setLoadedProjectVaultPath] = useState("");
-  const [loadedProfileVaultPath, setLoadedProfileVaultPath] = useState("");
+  const [, setLoadedProfileVaultPath] = useState("");
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
   const [pendingProfileName, setPendingProfileName] = useState(defaultProfile.name);
   const [pendingProfilePicture, setPendingProfilePicture] = useState(
     defaultProfile.profilePicture,
   );
   const todayDate = getTodayDateString();
-  const [items, setItems] = useState<Item[]>(defaultItems);
+  const [items, setItems] = useState<Item[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [journalSummaries, setJournalSummaries] = useState<JournalEntrySummary[]>(() =>
     createDefaultJournalSummaries(todayDate),
@@ -253,10 +292,19 @@ export function KenchiShell() {
   const [newTaskGoalId, setNewTaskGoalId] = useState("");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const keySequenceRef = useRef<string[]>([]);
-  const pendingCloseSequenceRef = useRef(false);
   const keySequenceTimeoutRef = useRef<number | null>(null);
   const itemMutationVersionRef = useRef(0);
   const projectMutationVersionRef = useRef(0);
+  const pageHistoryRef = useRef<NavigationLocation[]>([
+    {
+      view: "dashboard",
+      selectedProjectId: "",
+      selectedGoalId: "",
+      selectedTaskId: "",
+      selectedJournalDate: todayDate,
+    },
+  ]);
+  const pageHistoryIndexRef = useRef(0);
 
   const pageItems: CommandPaletteItem[] = navigationItems.map((item) => ({
     id: item.id,
@@ -452,7 +500,6 @@ export function KenchiShell() {
 
   function clearKeySequence() {
     keySequenceRef.current = [];
-    pendingCloseSequenceRef.current = false;
 
     if (keySequenceTimeoutRef.current) {
       window.clearTimeout(keySequenceTimeoutRef.current);
@@ -489,11 +536,7 @@ export function KenchiShell() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      const isTypingTarget =
-        event.target instanceof HTMLElement &&
-        (event.target.tagName === "INPUT" ||
-          event.target.tagName === "TEXTAREA" ||
-          event.target.isContentEditable);
+      const typingTarget = isTypingTarget(event.target);
 
       if (event.ctrlKey && event.code === "Backquote") {
         event.preventDefault();
@@ -559,37 +602,10 @@ export function KenchiShell() {
       }
 
       if (
-        pendingCloseSequenceRef.current &&
-        event.key.toLowerCase() === "z" &&
-        activeView === "tasks" &&
-        selectedTaskId
-      ) {
-        event.preventDefault();
-        setSelectedTaskId("");
-        clearKeySequence();
-        return;
-      }
-
-      if (
-        event.ctrlKey &&
-        event.key.toLowerCase() === "z" &&
-        activeView === "tasks" &&
-        selectedTaskId
-      ) {
-        event.preventDefault();
-        pendingCloseSequenceRef.current = true;
-        return;
-      }
-
-      if (pendingCloseSequenceRef.current) {
-        pendingCloseSequenceRef.current = false;
-      }
-
-      if (
         event.key === "Escape" &&
         activeView === "goals" &&
         selectedGoalId &&
-        !isTypingTarget
+        !typingTarget
       ) {
         event.preventDefault();
         setSelectedGoalId("");
@@ -597,9 +613,14 @@ export function KenchiShell() {
         return;
       }
 
-      if (event.key === "Escape" && activeView === "tasks" && selectedTaskId && !isTypingTarget) {
+      if (
+        event.key === "Escape" &&
+        (activeView === "tasks" || activeView === "projects") &&
+        selectedTaskId &&
+        !typingTarget
+      ) {
         event.preventDefault();
-        setSelectedTaskId("");
+        closeTaskDetailInView(activeView);
         clearKeySequence();
         return;
       }
@@ -613,9 +634,25 @@ export function KenchiShell() {
         newTaskOpen ||
         newProjectOpen ||
         settingsOpen ||
-        isTypingTarget
+        typingTarget
       ) {
         return;
+      }
+
+      if (event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (event.key === "H") {
+          event.preventDefault();
+          navigatePageHistory(-1);
+          clearKeySequence();
+          return;
+        }
+
+        if (event.key === "L") {
+          event.preventDefault();
+          navigatePageHistory(1);
+          clearKeySequence();
+          return;
+        }
       }
 
       if (event.key === ":") {
@@ -640,8 +677,9 @@ export function KenchiShell() {
         return;
       }
 
-      if (normalizedKey === leaderKey) {
+      if (normalizedKey === leaderKey || keySequenceRef.current.length) {
         event.preventDefault();
+        event.stopPropagation();
       }
 
       const nextSequence = [...keySequenceRef.current, normalizedKey].slice(-4);
@@ -749,21 +787,14 @@ export function KenchiShell() {
   ]);
 
   useEffect(() => {
-    function handleCloseTaskPanel() {
-      setSelectedTaskId("");
-      clearKeySequence();
-    }
-
     function handleCloseGoalPanel() {
       setSelectedGoalId("");
       clearKeySequence();
     }
 
-    window.addEventListener("kenchi:close-task-panel", handleCloseTaskPanel);
     window.addEventListener("kenchi:close-goal-panel", handleCloseGoalPanel);
 
     return () => {
-      window.removeEventListener("kenchi:close-task-panel", handleCloseTaskPanel);
       window.removeEventListener("kenchi:close-goal-panel", handleCloseGoalPanel);
     };
   }, []);
@@ -805,7 +836,7 @@ export function KenchiShell() {
     const initialItemMutationVersion = itemMutationVersionRef.current;
 
     if (!vaultPath) {
-      setItems(defaultItems);
+      setItems([]);
       setLoadedItemVaultPath("");
       return;
     }
@@ -814,14 +845,14 @@ export function KenchiShell() {
       .then((loadedItems) => {
         if (!cancelled) {
           if (itemMutationVersionRef.current === initialItemMutationVersion) {
-            setItems(loadedItems.length > 0 ? loadedItems : defaultItems);
+            setItems(loadedItems);
           }
           setLoadedItemVaultPath(vaultPath);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setItems(defaultItems);
+          setItems([]);
           setLoadedItemVaultPath(vaultPath);
         }
       });
@@ -1006,27 +1037,137 @@ export function KenchiShell() {
       });
   }, [journalEntry, loadedJournalVaultPath, vaultPath]);
 
-  function navigateToPage(view: ViewId) {
-    setActiveView(view);
+  function buildNavigationLocation(
+    overrides: Partial<NavigationLocation> = {},
+  ): NavigationLocation {
+    return {
+      view: activeView,
+      selectedProjectId,
+      selectedGoalId,
+      selectedTaskId,
+      selectedJournalDate,
+      ...overrides,
+    };
+  }
+
+  function applyNavigationLocation(location: NavigationLocation) {
+    setActiveView(location.view);
+    setSelectedProjectId(location.selectedProjectId);
+    setSelectedGoalId(location.selectedGoalId);
+    setSelectedTaskId(location.selectedTaskId);
+    setSelectedJournalDate(location.selectedJournalDate);
+  }
+
+  function navigateToLocation(
+    location: NavigationLocation,
+    options?: {
+      recordHistory?: boolean;
+    },
+  ) {
+    const currentLocation = buildNavigationLocation();
+
+    if (options?.recordHistory !== false && !locationsMatch(currentLocation, location)) {
+      const currentHistory = pageHistoryRef.current.slice(0, pageHistoryIndexRef.current + 1);
+      const lastVisitedLocation = currentHistory[currentHistory.length - 1];
+
+      if (!lastVisitedLocation || !locationsMatch(lastVisitedLocation, location)) {
+        currentHistory.push(location);
+      }
+
+      pageHistoryRef.current = currentHistory;
+      pageHistoryIndexRef.current = currentHistory.length - 1;
+    }
+
+    applyNavigationLocation(location);
+  }
+
+  function navigateToPage(
+    view: ViewId,
+    options?: {
+      clearTaskSelection?: boolean;
+      recordHistory?: boolean;
+    },
+  ) {
+    navigateToLocation(
+      buildNavigationLocation({
+        view,
+        selectedTaskId: view === "tasks" && options?.clearTaskSelection ? "" : selectedTaskId,
+      }),
+      { recordHistory: options?.recordHistory },
+    );
+  }
+
+  function navigatePageHistory(offset: 1 | -1) {
+    const nextIndex = pageHistoryIndexRef.current + offset;
+
+    if (nextIndex < 0 || nextIndex >= pageHistoryRef.current.length) {
+      return;
+    }
+
+    pageHistoryIndexRef.current = nextIndex;
+    navigateToLocation(pageHistoryRef.current[nextIndex], { recordHistory: false });
   }
 
   function navigateToProject(projectId: string) {
-    setSelectedProjectId(projectId);
-    setActiveView("projects");
+    navigateToLocation(
+      buildNavigationLocation({
+        view: "projects",
+        selectedProjectId: projectId,
+      }),
+    );
   }
 
   function navigateToTask(taskId: string) {
-    setSelectedTaskId(taskId);
-    setActiveView("tasks");
+    navigateToLocation(
+      buildNavigationLocation({
+        view: "tasks",
+        selectedTaskId: taskId,
+      }),
+    );
   }
 
   function navigateToGoal(goalId: string) {
-    setSelectedGoalId(goalId);
-    setActiveView("goals");
+    navigateToLocation(
+      buildNavigationLocation({
+        view: "goals",
+        selectedGoalId: goalId,
+      }),
+    );
   }
 
   function navigateToInboxItem(_itemId: string) {
-    setActiveView("inbox");
+    navigateToPage("inbox");
+  }
+
+  function openTaskDetailInView(taskId: string, view: "tasks" | "projects") {
+    navigateToLocation(
+      buildNavigationLocation({
+        view,
+        selectedTaskId: taskId,
+      }),
+    );
+  }
+
+  function closeTaskDetailInView(view: "tasks" | "projects") {
+    navigateToLocation(
+      buildNavigationLocation({
+        view,
+        selectedTaskId: "",
+      }),
+    );
+  }
+
+  function handleSelectTask(taskId: string) {
+    if (taskId) {
+      openTaskDetailInView(taskId, "tasks");
+      return;
+    }
+
+    closeTaskDetailInView("tasks");
+  }
+
+  function handleSelectProjectTask(taskId: string) {
+    openTaskDetailInView(taskId, "projects");
   }
 
   function openListPalette(kind: ListPaletteKind) {
@@ -1136,7 +1277,9 @@ export function KenchiShell() {
   }
 
   function handleSelectPage(item: CommandPaletteItem) {
-    navigateToPage(item.id as ViewId);
+    navigateToPage(item.id as ViewId, {
+      clearTaskSelection: item.id === "tasks",
+    });
     setCommandPaletteOpen(false);
   }
 
@@ -1167,6 +1310,8 @@ export function KenchiShell() {
       return;
     }
 
+    const timestamp = getCurrentTimestamp();
+
     void mutateItems(
       (current) => [
         {
@@ -1176,9 +1321,10 @@ export function KenchiShell() {
           sourceType: "capture",
           title: text,
           content: text,
-          createdAt: "Just now",
-          updatedAt: "Just now",
+          createdAt: timestamp,
+          updatedAt: timestamp,
           tags: [],
+          projectId: undefined,
           project: "",
           isCompleted: false,
           priority: "",
@@ -1207,7 +1353,10 @@ export function KenchiShell() {
     description: string;
     projectId: string;
     goalId: string;
+    projectLaneId?: string;
+    openDetailOnSuccess?: boolean;
   }) {
+    const timestamp = getCurrentTimestamp();
     const nextTaskId = `item-${Date.now()}`;
     const nextTask: Item = {
       id: nextTaskId,
@@ -1216,10 +1365,11 @@ export function KenchiShell() {
       sourceType: "manual",
       title: task.title,
       content: task.description,
-      createdAt: "just now",
-      updatedAt: "just now",
+      createdAt: timestamp,
+      updatedAt: timestamp,
       tags: [],
       projectId: task.projectId || undefined,
+      projectLaneId: task.projectLaneId || getDefaultProjectLaneId(projects, task.projectId),
       project: getProjectName(projects, task.projectId, ""),
       isCompleted: false,
       priority: "",
@@ -1265,7 +1415,7 @@ export function KenchiShell() {
                     ...item.goalScope,
                     taskIds: [...existingTaskIds, nextTaskId],
                   },
-                  updatedAt: "just now",
+                  updatedAt: timestamp,
                 }
               : item,
           ),
@@ -1275,12 +1425,16 @@ export function KenchiShell() {
       {
         successMessage: "Task saved to vault.",
         onSuccess: () => {
-          setSelectedTaskId(nextTask.id);
+          if (task.openDetailOnSuccess !== false) {
+            setSelectedTaskId(nextTask.id);
+          }
           setNewTaskOpen(false);
           setNewTaskGoalId("");
         },
       },
     );
+
+    return nextTaskId;
   }
 
   function handleOpenCreateTaskForGoal(goalId: string) {
@@ -1296,6 +1450,7 @@ export function KenchiShell() {
     metric?: Item["goalMetric"];
     projectId: string;
   }) {
+    const timestamp = getCurrentTimestamp();
     const nextGoal: Item = {
       id: `item-${Date.now()}`,
       kind: "goal",
@@ -1303,10 +1458,11 @@ export function KenchiShell() {
       sourceType: "manual",
       title: goal.title,
       content: goal.description,
-      createdAt: "just now",
-      updatedAt: "just now",
+      createdAt: timestamp,
+      updatedAt: timestamp,
       tags: [],
-      project: "",
+      projectId: goal.projectId || undefined,
+      project: getProjectName(projects, goal.projectId, ""),
       isCompleted: false,
       priority: "",
       dueDate: "",
@@ -1328,10 +1484,9 @@ export function KenchiShell() {
       {
         successMessage: "Goal saved to vault.",
         onSuccess: () => {
-          setSelectedGoalId(nextGoal.id);
           setNewGoalOpen(false);
           setEditingGoalId("");
-          setActiveView("goals");
+          navigateToGoal(nextGoal.id);
         },
       },
     );
@@ -1354,6 +1509,8 @@ export function KenchiShell() {
       return;
     }
 
+    const timestamp = getCurrentTimestamp();
+
     void mutateItems(
       (current) =>
         current.map((item) =>
@@ -1374,7 +1531,7 @@ export function KenchiShell() {
                         projectId: goal.projectId || undefined,
                       }
                     : undefined,
-                updatedAt: "just now",
+                updatedAt: timestamp,
               }
             : item,
         ),
@@ -1391,10 +1548,12 @@ export function KenchiShell() {
 
   function handleCreateProject(project: { name: string; description: string }) {
     const timestamp = new Date().toISOString();
+    const nextProjectId = `project-${Date.now()}`;
     const nextProject: Project = {
-      id: `project-${Date.now()}`,
+      id: nextProjectId,
       name: project.name,
       description: project.description,
+      boardLanes: defaultProjectBoardLanes(nextProjectId),
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -1404,9 +1563,8 @@ export function KenchiShell() {
       {
         successMessage: "Project saved to vault.",
         onSuccess: () => {
-          setSelectedProjectId(nextProject.id);
           setNewProjectOpen(false);
-          setActiveView("projects");
+          navigateToProject(nextProject.id);
         },
       },
     );
@@ -1425,11 +1583,13 @@ export function KenchiShell() {
         typeof updates.description === "string"
           ? updates.description.trim()
           : existingProject.description;
+      const nextBoardLanes = updates.boardLanes ?? existingProject.boardLanes;
       const timestamp = new Date().toISOString();
 
       if (
         nextName === existingProject.name &&
-        nextDescription === existingProject.description
+        nextDescription === existingProject.description &&
+        nextBoardLanes === existingProject.boardLanes
       ) {
         return current;
       }
@@ -1440,6 +1600,7 @@ export function KenchiShell() {
               ...project,
               name: nextName,
               description: nextDescription,
+              boardLanes: nextBoardLanes,
               updatedAt: timestamp,
             }
           : project,
@@ -1460,26 +1621,48 @@ export function KenchiShell() {
   }
 
   function handleUpdateTask(taskId: string, updates: Partial<Item>) {
-    void mutateItems((current) =>
-      current.map((item) =>
-        item.id === taskId
-          ? {
-              ...item,
-              ...updates,
-              completedAt:
-                updates.isCompleted === true
-                  ? todayDate
-                  : updates.isCompleted === false
-                    ? ""
-                    : item.completedAt,
-              updatedAt: "just now",
-            }
-          : item,
-      ),
+    const timestamp = getCurrentTimestamp();
+    let nextTask: Item | null = null;
+
+    setItems((current) =>
+      current.map((item) => {
+        if (item.id !== taskId || item.kind !== "task") {
+          return item;
+        }
+
+        nextTask = {
+          ...item,
+          ...updates,
+          completedAt:
+            updates.isCompleted === true
+              ? todayDate
+              : updates.isCompleted === false
+                ? ""
+                : item.completedAt,
+          updatedAt: timestamp,
+        };
+
+        return nextTask;
+      }),
     );
+
+    if (!nextTask) {
+      return;
+    }
+
+    if (!vaultPath || loadedItemVaultPath !== vaultPath) {
+      setToastMessage("Failed to save workspace changes: vault is not ready");
+      return;
+    }
+
+    void persistTaskUpdate(vaultPath, taskPayloadFromWorkspaceItem(nextTask)).catch((error) => {
+      setToastMessage(formatPersistenceError("save task", error));
+    });
   }
 
   function handleUpdateGoal(goalId: string, updates: Partial<Item>) {
+    const timestamp = getCurrentTimestamp();
+
     void mutateItems((current) =>
       current.map((item) =>
         item.id === goalId
@@ -1490,7 +1673,7 @@ export function KenchiShell() {
                 typeof updates.tags !== "undefined"
                   ? updates.tags
                   : item.tags,
-              updatedAt: "just now",
+              updatedAt: timestamp,
             }
           : item,
       ),
@@ -1507,41 +1690,135 @@ export function KenchiShell() {
     });
   }
 
-  function handleTransformItem(itemId: string, kind: Item["kind"]) {
+  function handleConvertCaptureToTask(itemId: string) {
+    const timestamp = getCurrentTimestamp();
+    const nextTaskId = `item-${Date.now()}`;
+
     void mutateItems(
-      (current) =>
-        current.map((item) =>
+      (current) => {
+        const capture = current.find((item) => item.id === itemId && item.kind === "capture");
+
+        if (!capture) {
+          return current;
+        }
+
+        const nextTask: Item = {
+          id: nextTaskId,
+          kind: "task",
+          state: "active",
+          sourceType: "capture",
+          title: capture.title,
+          content: capture.content,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          tags: capture.tags,
+          projectId: capture.projectId,
+          projectLaneId: getDefaultProjectLaneId(projects, capture.projectId),
+          project: getProjectName(projects, capture.projectId, capture.project),
+          isCompleted: false,
+          priority: "",
+          dueDate: "",
+          completedAt: "",
+          estimate: "",
+          sourceCaptureId: capture.id,
+          goalMetric: "tasks_completed",
+          goalTarget: 1,
+          goalProgress: 0,
+          goalProgressByDate: {},
+          goalPeriod: "weekly",
+        };
+
+        return current.flatMap((item) =>
           item.id === itemId
-            ? {
-                ...item,
-                kind,
-                state: kind === "document" || kind === "capture" ? "inbox" : "active",
-                sourceType: item.sourceType === "capture" ? "capture" : item.sourceType,
-                isCompleted: kind === "task" ? false : item.isCompleted,
-                updatedAt: "just now",
-              }
-            : item,
-        ),
+            ? [
+                {
+                  ...item,
+                  kind: "capture",
+                  state: "active",
+                  updatedAt: timestamp,
+                },
+                nextTask,
+              ]
+            : [item],
+        );
+      },
       {
         onSuccess: () => {
-          if (kind === "task") {
-            setSelectedTaskId(itemId);
-            setActiveView("tasks");
-          }
-
-          if (kind === "goal") {
-            setSelectedGoalId(itemId);
-            setActiveView("goals");
-          }
+          navigateToTask(nextTaskId);
         },
       },
     );
   }
 
-  function handleUpdateItemState(itemId: string, state: Item["state"]) {
+  function handleConvertCaptureToGoal(itemId: string) {
+    const timestamp = getCurrentTimestamp();
+    const nextGoalId = `item-${Date.now()}`;
+
+    void mutateItems(
+      (current) => {
+        const capture = current.find((item) => item.id === itemId && item.kind === "capture");
+
+        if (!capture) {
+          return current;
+        }
+
+        const nextGoal: Item = {
+          id: nextGoalId,
+          kind: "goal",
+          state: "active",
+          sourceType: "capture",
+          title: capture.title,
+          content: capture.content,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          tags: capture.tags,
+          projectId: capture.projectId,
+          project: getProjectName(projects, capture.projectId, capture.project),
+          isCompleted: false,
+          priority: "",
+          dueDate: "",
+          completedAt: "",
+          estimate: "",
+          goalMetric: undefined,
+          goalTarget: 1,
+          goalProgress: 0,
+          goalProgressByDate: {},
+          goalPeriod: "weekly",
+        };
+
+        return current.flatMap((item) =>
+          item.id === itemId
+            ? [
+                {
+                  ...item,
+                  kind: "capture",
+                  state: "active",
+                  updatedAt: timestamp,
+                },
+                nextGoal,
+              ]
+            : [item],
+        );
+      },
+      {
+        onSuccess: () => {
+          navigateToGoal(nextGoalId);
+        },
+      },
+    );
+  }
+
+  function handleUpdateCaptureState(
+    itemId: string,
+    state: Extract<Item["state"], "inbox" | "someday" | "active" | "archived">,
+  ) {
+    const timestamp = getCurrentTimestamp();
+
     void mutateItems((current) =>
       current.map((item) =>
-        item.id === itemId ? { ...item, state, updatedAt: "just now" } : item,
+        item.id === itemId && item.kind === "capture"
+          ? { ...item, state, updatedAt: timestamp }
+          : item,
       ),
     );
   }
@@ -1643,11 +1920,15 @@ export function KenchiShell() {
                 const Icon = item.icon;
 
                 return (
-                  <button
+              <button
                     key={item.id}
                     type="button"
                     className={`nav-button ${activeView === item.id ? "is-active" : ""}`}
-                    onClick={() => navigateToPage(item.id)}
+                    onClick={() =>
+                      navigateToPage(item.id, {
+                        clearTaskSelection: item.id === "tasks",
+                      })
+                    }
                     aria-label={item.label}
                     title={item.label}
                   >
@@ -1687,22 +1968,24 @@ export function KenchiShell() {
               selectedProjectId={selectedProjectId}
               selectedGoalId={selectedGoalId}
               selectedTaskId={selectedTaskId}
-              onSelectProject={setSelectedProjectId}
               onSelectGoal={setSelectedGoalId}
               onUpdateGoal={handleUpdateGoal}
               onDeleteGoal={handleDeleteItem}
               onEditGoal={handleOpenEditGoal}
               onCreateTaskForGoal={handleOpenCreateTaskForGoal}
-              onSelectTask={setSelectedTaskId}
+              onCreateTask={handleCreateTask}
+              onSelectTask={handleSelectTask}
+              onOpenProjectTask={handleSelectProjectTask}
+              onCloseTaskDetail={closeTaskDetailInView}
               onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteItem}
               onUpdateProject={handleUpdateProject}
-              onDeleteProject={handleDeleteProject}
               onUpdateJournalEntry={handleUpdateJournalEntry}
               onSelectJournalDate={setSelectedJournalDate}
-              onTransformItem={handleTransformItem}
-              onUpdateItemState={handleUpdateItemState}
-              onDeleteItem={handleDeleteItem}
+              onConvertCaptureToTask={handleConvertCaptureToTask}
+              onConvertCaptureToGoal={handleConvertCaptureToGoal}
+              onUpdateCaptureState={handleUpdateCaptureState}
+              onDeleteCapture={handleDeleteItem}
               onNotify={setToastMessage}
             />
           </div>

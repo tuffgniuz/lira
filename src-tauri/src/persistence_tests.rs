@@ -6,8 +6,8 @@ use crate::persistence::{
     models::{
         Capture, CaptureLifecycleStatus, CaptureTriageStatus, EntityTag, Goal, GoalProgressEntry,
         GoalStatus, GoalTrackingMode, GoalType, JournalCommitment, JournalCommitmentStatus,
-        JournalEntry, Project, ProjectStatus, Relationship, Tag, Task, TaskLifecycleStatus,
-        TaskQuery, TaskScheduleBucket, UserProfile,
+        JournalEntry, Project, ProjectBoardLane, ProjectStatus, Relationship, Tag, Task,
+        TaskLifecycleStatus, TaskQuery, TaskScheduleBucket, UserProfile,
     },
     project_repository::ProjectRepository,
     relationship_repository::RelationshipRepository,
@@ -28,6 +28,23 @@ fn sample_project() -> Project {
         name: "Kenchi".into(),
         description: Some("Primary workspace".into()),
         status: ProjectStatus::Active,
+        board_lanes: vec![
+            ProjectBoardLane {
+                id: "project-1-lane-to-do".into(),
+                name: "To Do".into(),
+                order: 0,
+            },
+            ProjectBoardLane {
+                id: "project-1-lane-in-progress".into(),
+                name: "In Progress".into(),
+                order: 1,
+            },
+            ProjectBoardLane {
+                id: "project-1-lane-done".into(),
+                name: "Done".into(),
+                order: 2,
+            },
+        ],
         created_at: "2026-03-17T08:00:00Z".into(),
         updated_at: "2026-03-17T08:00:00Z".into(),
     }
@@ -59,6 +76,7 @@ fn sample_task() -> Task {
         completed_at: None,
         estimate_minutes: Some(45),
         project_id: Some("project-1".into()),
+        project_lane_id: Some("project-1-lane-to-do".into()),
         source_capture_id: Some("capture-1".into()),
         created_at: "2026-03-17T08:00:00Z".into(),
         updated_at: "2026-03-17T08:00:00Z".into(),
@@ -214,6 +232,7 @@ fn creates_reads_updates_and_filters_tasks() {
         .expect("task should exist");
     assert_eq!(fetched.schedule_bucket, TaskScheduleBucket::Today);
     assert_eq!(fetched.source_capture_id.as_deref(), Some("capture-1"));
+    assert_eq!(fetched.project_lane_id.as_deref(), Some("project-1-lane-to-do"));
 
     repository
         .update(Task {
@@ -233,6 +252,54 @@ fn creates_reads_updates_and_filters_tasks() {
         .expect("task list should succeed");
     assert_eq!(done_tasks.len(), 1);
     assert_eq!(done_tasks[0].completed_at.as_deref(), Some("2026-03-17T11:00:00Z"));
+    assert_eq!(done_tasks[0].project_lane_id.as_deref(), Some("project-1-lane-to-do"));
+}
+
+#[test]
+fn creates_reads_and_updates_project_board_lanes() {
+    let db = test_db();
+    let repository = ProjectRepository::new(&db);
+
+    repository
+        .create(sample_project())
+        .expect("project should be created");
+
+    let created = repository.list().expect("projects should list");
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0].board_lanes.len(), 3);
+    assert_eq!(created[0].board_lanes[0].name, "To Do");
+
+    repository
+        .update(Project {
+            board_lanes: vec![
+                ProjectBoardLane {
+                    id: "project-1-lane-to-do".into(),
+                    name: "Backlog".into(),
+                    order: 0,
+                },
+                ProjectBoardLane {
+                    id: "project-1-lane-in-progress".into(),
+                    name: "Doing".into(),
+                    order: 1,
+                },
+                ProjectBoardLane {
+                    id: "project-1-lane-review".into(),
+                    name: "Review".into(),
+                    order: 2,
+                },
+                ProjectBoardLane {
+                    id: "project-1-lane-done".into(),
+                    name: "Done".into(),
+                    order: 3,
+                },
+            ],
+            ..sample_project()
+        })
+        .expect("project should update");
+
+    let updated = repository.list().expect("projects should list after update");
+    assert_eq!(updated[0].board_lanes.len(), 4);
+    assert_eq!(updated[0].board_lanes[2].name, "Review");
 }
 
 #[test]
@@ -461,4 +528,118 @@ fn migrates_legacy_tasks_table_to_current_columns() {
     assert_eq!(task.is_completed, false);
     assert_eq!(task.schedule_bucket, TaskScheduleBucket::Today);
     assert_eq!(task.source_capture_id.as_deref(), Some("capture-1"));
+    assert_eq!(task.project_lane_id.as_deref(), Some("project-1-lane-to-do"));
+}
+
+#[test]
+fn migrates_tasks_table_with_legacy_task_status_column() {
+    let temp_file = NamedTempFile::new().expect("temp db file should create");
+    let connection = Connection::open(temp_file.path()).expect("legacy sqlite db should open");
+
+    connection
+        .execute_batch(
+            "
+            CREATE TABLE projects (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE captures (
+                id TEXT PRIMARY KEY,
+                text TEXT NOT NULL,
+                lifecycle_status TEXT NOT NULL,
+                triage_status TEXT NOT NULL,
+                project_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                processed_at TEXT
+            );
+
+            CREATE TABLE tasks (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                lifecycle_status TEXT NOT NULL,
+                task_status TEXT NOT NULL,
+                is_completed INTEGER NOT NULL DEFAULT 0,
+                schedule_bucket TEXT NOT NULL DEFAULT 'none',
+                priority INTEGER,
+                due_at TEXT,
+                completed_at TEXT,
+                estimate_minutes INTEGER,
+                project_id TEXT,
+                source_capture_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            ",
+        )
+        .expect("legacy schema should create");
+    drop(connection);
+
+    let db = Database::open(temp_file.path()).expect("database should migrate legacy schema");
+    ProjectRepository::new(&db)
+        .create(sample_project())
+        .expect("project should be created after migration");
+    CaptureRepository::new(&db)
+        .create(sample_capture())
+        .expect("capture should be created after migration");
+
+    TaskRepository::new(&db)
+        .create(sample_task())
+        .expect("task should save after task_status migration");
+
+    let columns = db
+        .connection()
+        .prepare("PRAGMA table_info(tasks)")
+        .expect("task info statement should prepare")
+        .query_map([], |row| row.get::<_, String>(1))
+        .expect("task info should query")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("task columns should collect");
+
+    assert!(
+        !columns.iter().any(|column| column == "task_status"),
+        "legacy task_status column should be removed",
+    );
+}
+
+#[test]
+fn loads_default_project_board_lanes_for_legacy_projects_without_saved_lanes() {
+    let temp_file = NamedTempFile::new().expect("temp db file should create");
+    let connection = Connection::open(temp_file.path()).expect("legacy sqlite db should open");
+
+    connection
+        .execute_batch(
+            "
+            CREATE TABLE projects (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            INSERT INTO projects (id, name, description, status, created_at, updated_at)
+            VALUES ('project-1', 'Kenchi', 'Primary workspace', 'active', '2026-03-17T08:00:00Z', '2026-03-17T08:00:00Z');
+            ",
+        )
+        .expect("legacy project schema should create");
+    drop(connection);
+
+    let db = Database::open(temp_file.path()).expect("database should migrate legacy schema");
+    let projects = ProjectRepository::new(&db)
+        .list()
+        .expect("projects should list after migration");
+
+    assert_eq!(projects.len(), 1);
+    assert_eq!(projects[0].board_lanes.len(), 3);
+    assert_eq!(projects[0].board_lanes[0].name, "To Do");
+    assert_eq!(projects[0].board_lanes[1].name, "In Progress");
+    assert_eq!(projects[0].board_lanes[2].name, "Done");
 }

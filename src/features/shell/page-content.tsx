@@ -7,9 +7,11 @@ import type { Item } from "../../models/workspace-item";
 import type { JournalEntry, JournalEntrySummary } from "../../models/journal";
 import type { Project } from "../../models/project";
 import { CaptureInboxPage } from "../inbox/capture-inbox-page";
+import { buildInboxCaptureViews } from "../inbox/inbox-capture-view";
 import { JournalingPage } from "../journaling/journaling-page";
 import { GoalsPage } from "../goals/goals-page";
 import { ProjectsPage } from "../projects/projects-page";
+import { TaskDetailPage } from "../tasks/task-detail-page";
 import { TasksPage } from "../tasks/tasks-page";
 
 type PageContentProps = {
@@ -24,22 +26,34 @@ type PageContentProps = {
   selectedProjectId: string;
   selectedGoalId: string;
   selectedTaskId: string;
-  onSelectProject: (projectId: string) => void;
   onSelectGoal: (goalId: string) => void;
   onUpdateGoal: (goalId: string, updates: Partial<Item>) => void;
   onDeleteGoal: (goalId: string) => void;
   onEditGoal: (goalId: string) => void;
   onCreateTaskForGoal: (goalId: string) => void;
+  onCreateTask: (task: {
+    title: string;
+    description: string;
+    projectId: string;
+    goalId: string;
+    projectLaneId?: string;
+    openDetailOnSuccess?: boolean;
+  }) => string | undefined;
   onSelectTask: (taskId: string) => void;
+  onOpenProjectTask: (taskId: string) => void;
+  onCloseTaskDetail: (view: "tasks" | "projects") => void;
   onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
   onDeleteTask: (taskId: string) => void;
   onUpdateProject: (projectId: string, updates: Partial<Project>) => void;
-  onDeleteProject: (projectId: string) => void;
   onUpdateJournalEntry: (updates: Partial<JournalEntry>) => void;
   onSelectJournalDate: (date: string) => void;
-  onTransformItem: (itemId: string, kind: Item["kind"]) => void;
-  onUpdateItemState: (itemId: string, state: Item["state"]) => void;
-  onDeleteItem: (itemId: string) => void;
+  onConvertCaptureToTask: (captureId: string) => void;
+  onConvertCaptureToGoal: (captureId: string) => void;
+  onUpdateCaptureState: (
+    captureId: string,
+    state: Extract<Item["state"], "inbox" | "someday" | "active" | "archived">,
+  ) => void;
+  onDeleteCapture: (captureId: string) => void;
   onNotify: (message: string) => void;
 };
 
@@ -55,22 +69,24 @@ export function PageContent({
   selectedProjectId,
   selectedGoalId,
   selectedTaskId,
-  onSelectProject,
   onSelectGoal,
   onUpdateGoal,
   onDeleteGoal,
   onEditGoal,
   onCreateTaskForGoal,
+  onCreateTask,
   onSelectTask,
+  onOpenProjectTask,
+  onCloseTaskDetail,
   onUpdateTask,
   onDeleteTask,
   onUpdateProject,
-  onDeleteProject,
   onUpdateJournalEntry,
   onSelectJournalDate,
-  onTransformItem,
-  onUpdateItemState,
-  onDeleteItem,
+  onConvertCaptureToTask,
+  onConvertCaptureToGoal,
+  onUpdateCaptureState,
+  onDeleteCapture,
   onNotify,
 }: PageContentProps) {
   if (activeView === "dashboard") {
@@ -90,12 +106,11 @@ export function PageContent({
   if (activeView === "inbox") {
     return (
       <CaptureInboxPage
-        inboxItems={items.filter(
-          (item) => item.sourceType === "capture" && item.state !== "deleted",
-        )}
-        onTransformItem={onTransformItem}
-        onUpdateItemState={onUpdateItemState}
-        onDeleteItem={onDeleteItem}
+        captures={buildInboxCaptureViews(items, projects)}
+        onConvertCaptureToTask={onConvertCaptureToTask}
+        onConvertCaptureToGoal={onConvertCaptureToGoal}
+        onUpdateCaptureState={onUpdateCaptureState}
+        onDeleteCapture={onDeleteCapture}
         onNotify={onNotify}
       />
     );
@@ -121,15 +136,35 @@ export function PageContent({
   }
 
   if (activeView === "tasks") {
+    const selectedTask =
+      items.find((item) => item.id === selectedTaskId && item.kind === "task") ?? null;
+
     return (
-      <TasksPage
-        items={items}
-        projects={projects}
-        selectedTaskId={selectedTaskId}
-        onSelectTask={onSelectTask}
-        onUpdateTask={onUpdateTask}
-        onDeleteTask={onDeleteTask}
-      />
+      selectedTaskId ? (
+        selectedTask ? (
+          <TaskDetailPage
+            task={selectedTask}
+            projects={projects}
+            onBack={() => onCloseTaskDetail("tasks")}
+            onUpdateTask={onUpdateTask}
+            onDeleteTask={onDeleteTask}
+          />
+        ) : (
+          <TasksPage
+            items={items}
+            projects={projects}
+            onSelectTask={onSelectTask}
+            onDeleteTask={onDeleteTask}
+          />
+        )
+      ) : (
+        <TasksPage
+          items={items}
+          projects={projects}
+          onSelectTask={onSelectTask}
+          onDeleteTask={onDeleteTask}
+        />
+      )
     );
   }
 
@@ -148,17 +183,43 @@ export function PageContent({
   }
 
   if (activeView === "projects") {
+    const selectedTask =
+      items.find((item) => item.id === selectedTaskId && item.kind === "task") ?? null;
+
     return (
-      <ProjectsPage
-        projects={projects}
-        items={items}
-        journalSummaries={journalSummaries}
-        todayDate={todayDate}
-        selectedProjectId={selectedProjectId}
-        onSelectProject={onSelectProject}
-        onUpdateProject={onUpdateProject}
-        onDeleteProject={onDeleteProject}
-      />
+      selectedTaskId ? (
+        selectedTask ? (
+          <TaskDetailPage
+            task={selectedTask}
+            projects={projects}
+            eyebrow="Projects"
+            backLabel="Back to project board"
+            onBack={() => onCloseTaskDetail("projects")}
+            onUpdateTask={onUpdateTask}
+            onDeleteTask={onDeleteTask}
+          />
+        ) : (
+          <ProjectsPage
+            projects={projects}
+            items={items}
+            selectedProjectId={selectedProjectId}
+            onUpdateProject={onUpdateProject}
+            onUpdateTask={onUpdateTask}
+            onCreateTask={onCreateTask}
+            onSelectTask={onOpenProjectTask}
+          />
+        )
+      ) : (
+        <ProjectsPage
+          projects={projects}
+          items={items}
+          selectedProjectId={selectedProjectId}
+          onUpdateProject={onUpdateProject}
+          onUpdateTask={onUpdateTask}
+          onCreateTask={onCreateTask}
+          onSelectTask={onOpenProjectTask}
+        />
+      )
     );
   }
 

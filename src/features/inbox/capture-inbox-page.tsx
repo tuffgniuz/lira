@@ -3,34 +3,38 @@ import { ActionBar } from "../../components/ui/action-bar";
 import { EmptyState } from "../../components/ui/empty-state";
 import { Modal } from "../../components/ui/modal";
 import { PageShell } from "../../components/ui/page-shell";
-import type { Item } from "../../models/workspace-item";
+import { formatRelativeTimestamp } from "../../lib/format-relative-timestamp";
+import type { InboxCaptureState, InboxCaptureView } from "./inbox-capture-view";
 
 type PendingInboxAction =
-  | { type: "transform"; item: Item; nextKind: Item["kind"] }
-  | { type: "state"; item: Item; nextState: Item["state"] }
-  | { type: "delete"; item: Item };
+  | { type: "task"; capture: InboxCaptureView }
+  | { type: "goal"; capture: InboxCaptureView }
+  | { type: "state"; capture: InboxCaptureView; nextState: InboxCaptureState }
+  | { type: "delete"; capture: InboxCaptureView };
 
 export function CaptureInboxPage({
-  inboxItems,
-  onTransformItem,
-  onUpdateItemState,
-  onDeleteItem,
+  captures,
+  onConvertCaptureToTask,
+  onConvertCaptureToGoal,
+  onUpdateCaptureState,
+  onDeleteCapture,
   onNotify,
 }: {
-  inboxItems: Item[];
-  onTransformItem: (itemId: string, kind: Item["kind"]) => void;
-  onUpdateItemState: (itemId: string, state: Item["state"]) => void;
-  onDeleteItem: (itemId: string) => void;
+  captures: InboxCaptureView[];
+  onConvertCaptureToTask: (captureId: string) => void;
+  onConvertCaptureToGoal: (captureId: string) => void;
+  onUpdateCaptureState: (captureId: string, state: InboxCaptureState) => void;
+  onDeleteCapture: (captureId: string) => void;
   onNotify: (message: string) => void;
 }) {
-  const [activeFilter, setActiveFilter] = useState<"all" | Item["state"]>("inbox");
+  const [activeFilter, setActiveFilter] = useState<"all" | InboxCaptureState>("inbox");
   const [pendingAction, setPendingAction] = useState<PendingInboxAction | null>(null);
   const filteredItems = useMemo(
     () =>
-      inboxItems.filter((item) =>
-        activeFilter === "all" ? item.state !== "deleted" : item.state === activeFilter,
+      captures.filter((capture) =>
+        activeFilter === "all" ? true : capture.state === activeFilter,
       ),
-    [activeFilter, inboxItems],
+    [activeFilter, captures],
   );
 
   return (
@@ -71,7 +75,6 @@ export function CaptureInboxPage({
         </div>
       }
     >
-
       {filteredItems.length > 0 ? (
         <div className="inbox-table-wrap" aria-label="Captured thoughts">
           <table className="inbox-table">
@@ -79,7 +82,6 @@ export function CaptureInboxPage({
               <tr>
                 <th scope="col">Item</th>
                 <th scope="col">Created</th>
-                <th scope="col">Kind</th>
                 <th scope="col">State</th>
                 <th scope="col">Project</th>
                 <th scope="col">Tags</th>
@@ -92,31 +94,26 @@ export function CaptureInboxPage({
                   <td className="inbox-table__item-cell">
                     <div className="inbox-table__item-content">
                       <span className="inbox-item__marker" aria-hidden="true" />
-                      <span className="inbox-item__text">{item.content || item.title}</span>
+                      <span className="inbox-item__text">{item.text}</span>
                     </div>
                   </td>
-                  <td>{item.createdAt}</td>
-                  <td>{labelForKind(item.kind)}</td>
+                  <td>{formatRelativeTimestamp(item.createdAt)}</td>
                   <td>{labelForState(item.state)}</td>
-                  <td>{item.project || "None"}</td>
+                  <td>{item.projectName || "None"}</td>
                   <td>{item.tags.length > 0 ? item.tags.join(", ") : "None"}</td>
                   <td className="inbox-table__actions-cell">
                     <div className="inbox-item__actions" aria-label="Inbox item actions">
                       <button
                         type="button"
                         className="inbox-action"
-                        onClick={() =>
-                          setPendingAction({ type: "transform", item, nextKind: "task" })
-                        }
+                        onClick={() => setPendingAction({ type: "task", capture: item })}
                       >
                         Task
                       </button>
                       <button
                         type="button"
                         className="inbox-action"
-                        onClick={() =>
-                          setPendingAction({ type: "transform", item, nextKind: "goal" })
-                        }
+                        onClick={() => setPendingAction({ type: "goal", capture: item })}
                       >
                         Goal
                       </button>
@@ -124,16 +121,7 @@ export function CaptureInboxPage({
                         type="button"
                         className="inbox-action"
                         onClick={() =>
-                          setPendingAction({ type: "transform", item, nextKind: "document" })
-                        }
-                      >
-                        Document
-                      </button>
-                      <button
-                        type="button"
-                        className="inbox-action"
-                        onClick={() =>
-                          setPendingAction({ type: "state", item, nextState: "someday" })
+                          setPendingAction({ type: "state", capture: item, nextState: "someday" })
                         }
                       >
                         Someday
@@ -142,7 +130,7 @@ export function CaptureInboxPage({
                         type="button"
                         className="inbox-action"
                         onClick={() =>
-                          setPendingAction({ type: "state", item, nextState: "archived" })
+                          setPendingAction({ type: "state", capture: item, nextState: "archived" })
                         }
                       >
                         Archive
@@ -150,7 +138,7 @@ export function CaptureInboxPage({
                       <button
                         type="button"
                         className="inbox-action"
-                        onClick={() => setPendingAction({ type: "delete", item })}
+                        onClick={() => setPendingAction({ type: "delete", capture: item })}
                       >
                         Delete
                       </button>
@@ -175,22 +163,25 @@ export function CaptureInboxPage({
           pendingAction={pendingAction}
           onClose={() => setPendingAction(null)}
           onConfirm={() => {
-            if (pendingAction.type === "transform") {
-              onTransformItem(pendingAction.item.id, pendingAction.nextKind);
-              onNotify(
-                `Converted to ${labelForKind(pendingAction.nextKind).toLowerCase()} successfully.`,
-              );
+            if (pendingAction.type === "task") {
+              onConvertCaptureToTask(pendingAction.capture.id);
+              onNotify("Converted to task successfully.");
+            }
+
+            if (pendingAction.type === "goal") {
+              onConvertCaptureToGoal(pendingAction.capture.id);
+              onNotify("Converted to goal successfully.");
             }
 
             if (pendingAction.type === "state") {
-              onUpdateItemState(pendingAction.item.id, pendingAction.nextState);
+              onUpdateCaptureState(pendingAction.capture.id, pendingAction.nextState);
               onNotify(
                 `Moved to ${labelForState(pendingAction.nextState).toLowerCase()} successfully.`,
               );
             }
 
             if (pendingAction.type === "delete") {
-              onDeleteItem(pendingAction.item.id);
+              onDeleteCapture(pendingAction.capture.id);
               onNotify("Deleted successfully.");
             }
 
@@ -202,46 +193,33 @@ export function CaptureInboxPage({
   );
 }
 
-function labelForKind(kind: Item["kind"]) {
-  switch (kind) {
-    case "document":
-      return "Document";
-    case "goal":
-      return "Goal";
-    case "task":
-      return "Task";
-    default:
-      return "Capture";
-  }
-}
-
-function labelForState(state: Item["state"]) {
+function labelForState(state: InboxCaptureState) {
   switch (state) {
     case "someday":
       return "Someday";
     case "archived":
       return "Archived";
     case "active":
-      return "Active";
+      return "Processed";
     default:
       return "Inbox";
   }
 }
 
-function emptyTitleForFilter(filter: "all" | Item["state"]) {
+function emptyTitleForFilter(filter: "all" | InboxCaptureState) {
   switch (filter) {
     case "someday":
-      return "No someday items";
+      return "No someday captures";
     case "archived":
-      return "No archived items";
+      return "No archived captures";
     case "all":
-      return "No inbox items yet";
+      return "No captures yet";
     default:
       return "No captured thoughts yet";
   }
 }
 
-function emptyCopyForFilter(filter: "all" | Item["state"]) {
+function emptyCopyForFilter(filter: "all" | InboxCaptureState) {
   if (filter === "inbox") {
     return "Use `n i` to capture something from anywhere in the app.";
   }
@@ -267,21 +245,23 @@ function InboxActionConfirmModal({
   onConfirm: () => void;
 }) {
   const title =
-    pendingAction.type === "transform"
-      ? `Turn into ${labelForKind(pendingAction.nextKind)}`
-      : pendingAction.type === "state"
-        ? `Move to ${labelForState(pendingAction.nextState)}`
-        : "Delete item";
+    pendingAction.type === "task"
+      ? "Turn into Task"
+      : pendingAction.type === "goal"
+        ? "Turn into Goal"
+        : pendingAction.type === "state"
+          ? `Move to ${labelForState(pendingAction.nextState)}`
+          : "Delete item";
   const description =
-    pendingAction.type === "transform"
-      ? `This will keep the same item and change its type to ${labelForKind(
-          pendingAction.nextKind,
-        ).toLowerCase()}.`
-      : pendingAction.type === "state"
-        ? `This will move the item into the ${labelForState(
-            pendingAction.nextState,
-          ).toLowerCase()} state.`
-        : "This will permanently remove the item.";
+    pendingAction.type === "task"
+      ? "This will keep the original capture and create a linked task from it."
+      : pendingAction.type === "goal"
+        ? "This will keep the original capture and create a goal from it."
+        : pendingAction.type === "state"
+          ? `This will move the item into the ${labelForState(
+              pendingAction.nextState,
+            ).toLowerCase()} state.`
+          : "This will permanently remove the item.";
 
   return (
     <Modal ariaLabelledBy="inbox-confirm-title" className="inbox-confirm" onClose={onClose}>
@@ -289,7 +269,7 @@ function InboxActionConfirmModal({
         <p id="inbox-confirm-title" className="new-task__title">
           {title}
         </p>
-        <p className="inbox-confirm__item">{pendingAction.item.content || pendingAction.item.title}</p>
+        <p className="inbox-confirm__item">{pendingAction.capture.text}</p>
         <p className="inbox-confirm__copy">{description}</p>
         <ActionBar className="inbox-confirm__actions">
           <button type="button" className="inbox-confirm__button" onClick={onClose}>

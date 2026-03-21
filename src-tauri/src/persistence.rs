@@ -24,6 +24,14 @@ pub mod models {
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
     #[serde(rename_all = "camelCase")]
+    pub struct ProjectBoardLane {
+        pub id: String,
+        pub name: String,
+        pub order: i64,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    #[serde(rename_all = "camelCase")]
     pub struct Task {
         pub id: String,
         pub title: String,
@@ -36,6 +44,7 @@ pub mod models {
         pub completed_at: Option<String>,
         pub estimate_minutes: Option<i64>,
         pub project_id: Option<String>,
+        pub project_lane_id: Option<String>,
         pub source_capture_id: Option<String>,
         pub created_at: String,
         pub updated_at: String,
@@ -182,6 +191,7 @@ pub mod models {
         pub name: String,
         pub description: Option<String>,
         pub status: ProjectStatus,
+        pub board_lanes: Vec<ProjectBoardLane>,
         pub created_at: String,
         pub updated_at: String,
     }
@@ -296,6 +306,14 @@ pub mod database {
                         updated_at TEXT NOT NULL
                     );
 
+                    CREATE TABLE IF NOT EXISTS project_board_lanes (
+                        id TEXT PRIMARY KEY,
+                        project_id TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        sort_order INTEGER NOT NULL,
+                        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+                    );
+
                     CREATE TABLE IF NOT EXISTS tasks (
                         id TEXT PRIMARY KEY,
                         title TEXT NOT NULL,
@@ -308,6 +326,7 @@ pub mod database {
                         completed_at TEXT,
                         estimate_minutes INTEGER,
                         project_id TEXT,
+                        project_lane_id TEXT,
                         source_capture_id TEXT,
                         created_at TEXT NOT NULL,
                         updated_at TEXT NOT NULL,
@@ -425,7 +444,9 @@ pub mod database {
             add_column_if_missing(&self.connection, "tasks", "completed_at", "TEXT")?;
             add_column_if_missing(&self.connection, "tasks", "estimate_minutes", "INTEGER")?;
             add_column_if_missing(&self.connection, "tasks", "project_id", "TEXT")?;
+            add_column_if_missing(&self.connection, "tasks", "project_lane_id", "TEXT")?;
             add_column_if_missing(&self.connection, "tasks", "source_capture_id", "TEXT")?;
+            migrate_legacy_task_status_column(&self.connection)?;
             add_column_if_missing(&self.connection, "goals", "scope_tag", "TEXT")
         }
     }
@@ -437,15 +458,7 @@ fn add_column_if_missing(
     column_name: &str,
     column_definition: &str,
 ) -> Result<(), String> {
-    let mut statement = connection
-        .prepare(&format!("PRAGMA table_info({})", table_name))
-        .map_err(|error| error.to_string())?;
-
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|error| error.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| error.to_string())?;
+    let columns = table_columns(connection, table_name)?;
 
     if columns.iter().any(|column| column == column_name) {
         return Ok(());
@@ -460,6 +473,83 @@ fn add_column_if_missing(
             [],
         )
         .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn table_columns(connection: &Connection, table_name: &str) -> Result<Vec<String>, String> {
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info({})", table_name))
+        .map_err(|error| error.to_string())?;
+
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| error.to_string())?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
+fn migrate_legacy_task_status_column(connection: &Connection) -> Result<(), String> {
+    let columns = table_columns(connection, "tasks")?;
+
+    if !columns.iter().any(|column| column == "task_status") {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(
+            "
+            PRAGMA foreign_keys = OFF;
+
+            CREATE TABLE tasks_migrated (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                lifecycle_status TEXT NOT NULL,
+                is_completed INTEGER NOT NULL,
+                schedule_bucket TEXT NOT NULL,
+                priority INTEGER,
+                due_at TEXT,
+                completed_at TEXT,
+                estimate_minutes INTEGER,
+                project_id TEXT,
+                project_lane_id TEXT,
+                source_capture_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE SET NULL,
+                FOREIGN KEY(source_capture_id) REFERENCES captures(id) ON DELETE SET NULL
+            );
+
+            INSERT INTO tasks_migrated (
+                id, title, description, lifecycle_status, is_completed, schedule_bucket,
+                priority, due_at, completed_at, estimate_minutes, project_id, project_lane_id, source_capture_id,
+                created_at, updated_at
+            )
+            SELECT
+                id,
+                title,
+                description,
+                lifecycle_status,
+                is_completed,
+                schedule_bucket,
+                priority,
+                due_at,
+                completed_at,
+                estimate_minutes,
+                project_id,
+                NULL,
+                source_capture_id,
+                created_at,
+                updated_at
+            FROM tasks;
+
+            DROP TABLE tasks;
+            ALTER TABLE tasks_migrated RENAME TO tasks;
+
+            PRAGMA foreign_keys = ON;
+            ",
+        )
         .map_err(|error| error.to_string())
 }
 
@@ -635,8 +725,28 @@ pub mod capture_repository {
 
 pub mod project_repository {
     use super::database::Database;
-    use super::models::{Project, ProjectStatus};
+    use super::models::{Project, ProjectBoardLane, ProjectStatus};
     use super::{decode_enum, encode_enum, option_string, params, to_sql_error};
+
+    fn default_project_board_lanes(project_id: &str) -> Vec<ProjectBoardLane> {
+        vec![
+            ProjectBoardLane {
+                id: format!("{}-lane-to-do", project_id),
+                name: "To Do".into(),
+                order: 0,
+            },
+            ProjectBoardLane {
+                id: format!("{}-lane-in-progress", project_id),
+                name: "In Progress".into(),
+                order: 1,
+            },
+            ProjectBoardLane {
+                id: format!("{}-lane-done", project_id),
+                name: "Done".into(),
+                order: 2,
+            },
+        ]
+    }
 
     pub struct ProjectRepository<'a> {
         db: &'a Database,
@@ -648,6 +758,12 @@ pub mod project_repository {
         }
 
         pub fn create(&self, project: Project) -> Result<(), String> {
+            let board_lanes = if project.board_lanes.is_empty() {
+                default_project_board_lanes(&project.id)
+            } else {
+                project.board_lanes.clone()
+            };
+
             self.db
                 .connection()
                 .execute(
@@ -664,11 +780,18 @@ pub mod project_repository {
                         project.updated_at
                     ],
                 )
-                .map(|_| ())
-                .map_err(|error| error.to_string())
+                .map_err(|error| error.to_string())?;
+
+            self.replace_board_lanes(&project.id, &board_lanes)
         }
 
         pub fn update(&self, project: Project) -> Result<(), String> {
+            let board_lanes = if project.board_lanes.is_empty() {
+                default_project_board_lanes(&project.id)
+            } else {
+                project.board_lanes.clone()
+            };
+
             self.db
                 .connection()
                 .execute(
@@ -686,8 +809,9 @@ pub mod project_repository {
                         project.updated_at
                     ],
                 )
-                .map(|_| ())
-                .map_err(|error| error.to_string())
+                .map_err(|error| error.to_string())?;
+
+            self.replace_board_lanes(&project.id, &board_lanes)
         }
 
         pub fn list(&self) -> Result<Vec<Project>, String> {
@@ -710,14 +834,27 @@ pub mod project_repository {
                         name: row.get(1)?,
                         description: option_string(row, 2)?,
                         status: decode_enum::<ProjectStatus>(row.get(3)?).map_err(to_sql_error)?,
+                        board_lanes: Vec::new(),
                         created_at: row.get(4)?,
                         updated_at: row.get(5)?,
                     })
                 })
                 .map_err(|error| error.to_string())?;
 
-            rows.collect::<Result<Vec<_>, _>>()
-                .map_err(|error| error.to_string())
+            let mut projects = rows
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| error.to_string())?;
+
+            for project in &mut projects {
+                let lanes = self.list_board_lanes(&project.id)?;
+                project.board_lanes = if lanes.is_empty() {
+                    default_project_board_lanes(&project.id)
+                } else {
+                    lanes
+                };
+            }
+
+            Ok(projects)
         }
 
         pub fn delete(&self, id: &str) -> Result<(), String> {
@@ -731,11 +868,72 @@ pub mod project_repository {
         pub fn replace_all(&self, projects: Vec<Project>) -> Result<(), String> {
             self.db
                 .connection()
+                .execute("DELETE FROM project_board_lanes", [])
+                .map_err(|error| error.to_string())?;
+            self.db
+                .connection()
                 .execute("DELETE FROM projects", [])
                 .map_err(|error| error.to_string())?;
 
             for project in projects {
                 self.create(project)?;
+            }
+
+            Ok(())
+        }
+
+        fn list_board_lanes(&self, project_id: &str) -> Result<Vec<ProjectBoardLane>, String> {
+            let mut statement = self
+                .db
+                .connection()
+                .prepare(
+                    "
+                    SELECT id, name, sort_order
+                    FROM project_board_lanes
+                    WHERE project_id = ?1
+                    ORDER BY sort_order ASC, id ASC
+                    ",
+                )
+                .map_err(|error| error.to_string())?;
+
+            let rows = statement
+                .query_map(params![project_id], |row| {
+                    Ok(ProjectBoardLane {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        order: row.get(2)?,
+                    })
+                })
+                .map_err(|error| error.to_string())?;
+
+            rows.collect::<Result<Vec<_>, _>>()
+                .map_err(|error| error.to_string())
+        }
+
+        fn replace_board_lanes(
+            &self,
+            project_id: &str,
+            board_lanes: &[ProjectBoardLane],
+        ) -> Result<(), String> {
+            self.db
+                .connection()
+                .execute(
+                    "DELETE FROM project_board_lanes WHERE project_id = ?1",
+                    params![project_id],
+                )
+                .map_err(|error| error.to_string())?;
+
+            for lane in board_lanes {
+                self.db
+                    .connection()
+                    .execute(
+                        "
+                        INSERT INTO project_board_lanes (id, project_id, name, sort_order)
+                        VALUES (?1, ?2, ?3, ?4)
+                        ",
+                        params![lane.id, project_id, lane.name, lane.order],
+                    )
+                    .map_err(|error| error.to_string())?;
             }
 
             Ok(())
@@ -764,9 +962,9 @@ pub mod task_repository {
                     "
                     INSERT INTO tasks (
                         id, title, description, lifecycle_status, is_completed, schedule_bucket,
-                        priority, due_at, completed_at, estimate_minutes, project_id, source_capture_id,
-                        created_at, updated_at
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                        priority, due_at, completed_at, estimate_minutes, project_id, project_lane_id,
+                        source_capture_id, created_at, updated_at
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
                     ",
                     params![
                         task.id,
@@ -780,6 +978,7 @@ pub mod task_repository {
                         task.completed_at,
                         task.estimate_minutes,
                         task.project_id,
+                        task.project_lane_id,
                         task.source_capture_id,
                         task.created_at,
                         task.updated_at
@@ -805,9 +1004,10 @@ pub mod task_repository {
                         completed_at = ?9,
                         estimate_minutes = ?10,
                         project_id = ?11,
-                        source_capture_id = ?12,
-                        created_at = ?13,
-                        updated_at = ?14
+                        project_lane_id = ?12,
+                        source_capture_id = ?13,
+                        created_at = ?14,
+                        updated_at = ?15
                     WHERE id = ?1
                     ",
                     params![
@@ -822,6 +1022,7 @@ pub mod task_repository {
                         task.completed_at,
                         task.estimate_minutes,
                         task.project_id,
+                        task.project_lane_id,
                         task.source_capture_id,
                         task.created_at,
                         task.updated_at
@@ -837,7 +1038,7 @@ pub mod task_repository {
                 .query_row(
                     "
                     SELECT id, title, description, lifecycle_status, is_completed, schedule_bucket, priority,
-                           due_at, completed_at, estimate_minutes, project_id, source_capture_id, created_at, updated_at
+                           due_at, completed_at, estimate_minutes, project_id, project_lane_id, source_capture_id, created_at, updated_at
                     FROM tasks
                     WHERE id = ?1
                     ",
@@ -855,7 +1056,7 @@ pub mod task_repository {
                 .prepare(
                     "
                     SELECT id, title, description, lifecycle_status, is_completed, schedule_bucket, priority,
-                           due_at, completed_at, estimate_minutes, project_id, source_capture_id, created_at, updated_at
+                           due_at, completed_at, estimate_minutes, project_id, project_lane_id, source_capture_id, created_at, updated_at
                     FROM tasks
                     WHERE (?1 IS NULL OR lifecycle_status = ?1)
                       AND (?2 IS NULL OR is_completed = ?2)
@@ -920,9 +1121,10 @@ pub mod task_repository {
             completed_at: option_string(row, 8)?,
             estimate_minutes: row.get(9)?,
             project_id: option_string(row, 10)?,
-            source_capture_id: option_string(row, 11)?,
-            created_at: row.get(12)?,
-            updated_at: row.get(13)?,
+            project_lane_id: option_string(row, 11)?,
+            source_capture_id: option_string(row, 12)?,
+            created_at: row.get(13)?,
+            updated_at: row.get(14)?,
         })
     }
 }
