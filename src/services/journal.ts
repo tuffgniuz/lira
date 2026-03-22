@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { JournalEntry, JournalEntrySummary } from "../models/journal";
+import type { JournalEntry, JournalEntrySummary } from "@/models/journal";
 
 export async function loadJournalEntry(vaultPath: string, date: string) {
   if (!vaultPath) {

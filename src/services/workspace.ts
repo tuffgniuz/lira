@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { WorkspaceItem } from "../models/workspace-item";
+import type { WorkspaceItem } from "@/models/workspace-item";
 
 export async function loadWorkspaceItems(vaultPath: string) {
   if (!vaultPath) {

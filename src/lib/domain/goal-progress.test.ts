@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Item } from "../../models/workspace-item";
+import type { Item } from "@/models/workspace-item";
 import { resolveGoalProgress, resolveGoalProgressForDate } from "./goal-progress";
 
 function createItem(overrides: Partial<Item> = {}): Item {

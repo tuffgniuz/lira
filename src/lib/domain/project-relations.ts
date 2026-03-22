@@ -1,5 +1,5 @@
-import type { Item } from "../../models/workspace-item";
-import type { Project } from "../../models/project";
+import type { Item } from "@/models/workspace-item";
+import type { Project } from "@/models/project";
 
 function hasProjectScope(item: Item) {
   return item.goalScope?.projectId;

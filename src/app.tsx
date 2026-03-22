@@ -1,6 +1,6 @@
-import { ThemeProvider } from "./theme/theme-provider";
-import { LiraShell } from "./features/shell/lira-shell";
-import "./app.css";
+import { LiraShell } from "@/app/shell/lira-shell";
+import { ThemeProvider } from "@/theme/theme-provider";
+import "@/styles/globals.css";
 
 function App() {
   return (

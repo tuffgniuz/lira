@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { JournalEntry, JournalEntrySummary } from "../../models/journal";
+import type { JournalEntry, JournalEntrySummary } from "@/models/journal";
 import { applyJournalEntryUpdates, upsertJournalSummary } from "./journal-entry-state";
 
 function createJournalEntry(overrides: Partial<JournalEntry> = {}): JournalEntry {

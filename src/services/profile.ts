@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { UserProfile } from "../models/profile";
+import type { UserProfile } from "@/models/profile";
 
 export async function loadProfile(vaultPath: string) {
   if (!vaultPath) {

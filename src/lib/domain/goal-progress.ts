@@ -1,5 +1,5 @@
-import type { Item } from "../../models/workspace-item";
-import type { JournalEntrySummary } from "../../models/journal";
+import type { Item } from "@/models/workspace-item";
+import type { JournalEntrySummary } from "@/models/journal";
 
 type GoalProgressContext = {
   items: Item[];

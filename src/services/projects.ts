@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Project } from "../models/project";
+import type { Project } from "@/models/project";
 
 export async function loadProjects(vaultPath: string) {
   if (!vaultPath) {

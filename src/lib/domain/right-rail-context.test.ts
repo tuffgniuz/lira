@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Item } from "../../models/workspace-item";
+import type { Item } from "@/models/workspace-item";
 import { buildRightRailContext } from "./right-rail-context";
 
 function createItem(overrides: Partial<Item> = {}): Item {
@@ -46,6 +46,7 @@ describe("buildRightRailContext", () => {
       {
         id: "goal-1",
         title: "Close two tasks",
+        projectLabel: "",
         completedCount: 1,
         progressDenominator: 2,
         progressPercent: 50,

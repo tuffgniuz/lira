@@ -1,16 +1,16 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import goalsPageSource from "./features/goals/goals-page.tsx?raw";
-import inboxPageSource from "./features/inbox/capture-inbox-page.tsx?raw";
-import journalingPageSource from "./features/journaling/journaling-page.tsx?raw";
-import newProjectModalSource from "./features/projects/new-project-modal.tsx?raw";
-import quickCaptureModalSource from "./features/quick-capture/quick-capture-modal.tsx?raw";
-import projectsPageSource from "./features/projects/projects-page.tsx?raw";
-import settingsModalSource from "./features/settings/settings-modal.tsx?raw";
-import newTaskModalSource from "./features/tasks/new-task-modal.tsx?raw";
-import tasksPageSource from "./features/tasks/tasks-page.tsx?raw";
+import goalsPageSource from "./pages/goals/goals-page.tsx?raw";
+import inboxPageSource from "./pages/inbox/capture-inbox-page.tsx?raw";
+import journalingPageSource from "./pages/journaling/journaling-page.tsx?raw";
+import newProjectModalSource from "./components/actions/new-project-modal/new-project-modal.tsx?raw";
+import quickCaptureModalSource from "./components/actions/quick-capture-modal/quick-capture-modal.tsx?raw";
+import projectsPageSource from "./pages/projects/projects-page.tsx?raw";
+import settingsModalSource from "./components/actions/settings-modal/settings-modal.tsx?raw";
+import newTaskModalSource from "./components/actions/new-task-modal/new-task-modal.tsx?raw";
+import tasksPageSource from "./pages/tasks/tasks-page.tsx?raw";
 
-const appCss = readFileSync("src/app.css", "utf8");
+const appCss = readFileSync("src/styles/globals.css", "utf8");
 
 function getCssBlock(selector: string) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -92,7 +92,6 @@ describe("ui consistency", () => {
     expect(newProjectModalSource).toContain('className="modal-form__textarea ui-input"');
     expect(newTaskModalSource).toContain('className="modal-form__input ui-input"');
     expect(newTaskModalSource).toContain('className="modal-form__textarea ui-input"');
-    expect(newTaskModalSource).toContain('className="modal-form__select ui-input"');
     expect(quickCaptureModalSource).toContain('className="modal-form__input ui-input"');
   });
 

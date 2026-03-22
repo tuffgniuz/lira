@@ -1,4 +1,4 @@
-import type { JournalEntry, JournalEntrySummary } from "../../models/journal";
+import type { JournalEntry, JournalEntrySummary } from "@/models/journal";
 
 export function applyJournalEntryUpdates(
   current: JournalEntry,

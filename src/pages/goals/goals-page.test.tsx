@@ -1,0 +1,344 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { GoalsPage } from "./goals-page";
+import type { Item } from "@/models/workspace-item";
+import type { JournalEntrySummary } from "@/models/journal";
+import type { Project } from "@/models/project";
+
+function setViewportWidth(width: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    writable: true,
+    value: width,
+  });
+
+  fireEvent(window, new Event("resize"));
+}
+
+function createGoal(overrides: Partial<Item> = {}): Item {
+  return {
+    id: "goal-1",
+    kind: "goal",
+    state: "active",
+    sourceType: "manual",
+    title: "Complete 5 tasks",
+    content: "Progress updates from completed tasks in the current period.",
+    createdAt: "today",
+    updatedAt: "today",
+    tags: [],
+    project: "",
+    isCompleted: false,
+    priority: "",
+    dueDate: "",
+    completedAt: "",
+    estimate: "",
+    goalMetric: "tasks_completed",
+    goalTarget: 5,
+    goalProgress: 0,
+    goalProgressByDate: {},
+    goalPeriod: "daily",
+    ...overrides,
+  } as Item;
+}
+
+describe("GoalsPage", () => {
+  it("shows the selected goal even when its period is not the default filter", () => {
+    render(
+      <GoalsPage
+        items={[
+          {
+            id: "goal-1",
+            kind: "goal",
+            state: "active",
+            sourceType: "manual",
+            title: "Ship the weekly review",
+            content: "",
+            createdAt: "today",
+            updatedAt: "today",
+            tags: [],
+            project: "",
+            isCompleted: false,
+            priority: "",
+            dueDate: "",
+            completedAt: "",
+            estimate: "",
+            goalMetric: undefined,
+            goalTarget: 1,
+            goalProgress: 0,
+            goalProgressByDate: {},
+            goalPeriod: "weekly",
+          },
+        ] as Item[]}
+        projects={[] as Project[]}
+        journalSummaries={[] as JournalEntrySummary[]}
+        todayDate="2026-03-17"
+        selectedGoalId="goal-1"
+        onSelectGoal={vi.fn()}
+        onUpdateGoal={vi.fn()}
+        onDeleteGoal={vi.fn()}
+        onEditGoal={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onDeleteTask={vi.fn()}
+        onCreateTaskForGoal={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Ship the weekly review")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Weekly" })).toHaveClass("is-active");
+  });
+
+  it("lets a metric-less goal be marked complete from the goal card", () => {
+    const onUpdateGoal = vi.fn();
+
+    render(
+      <GoalsPage
+        items={[
+          {
+            id: "goal-1",
+            kind: "goal",
+            state: "active",
+            sourceType: "manual",
+            title: "Study security this week",
+            content: "",
+            createdAt: "today",
+            updatedAt: "today",
+            tags: [],
+            project: "",
+            isCompleted: false,
+            priority: "",
+            dueDate: "",
+            completedAt: "",
+            estimate: "",
+            goalMetric: undefined,
+            goalTarget: 1,
+            goalProgress: 0,
+            goalProgressByDate: {},
+            goalPeriod: "weekly",
+          },
+        ] as Item[]}
+        projects={[] as Project[]}
+        journalSummaries={[] as JournalEntrySummary[]}
+        todayDate="2026-03-17"
+        selectedGoalId="goal-1"
+        onSelectGoal={vi.fn()}
+        onUpdateGoal={onUpdateGoal}
+        onDeleteGoal={vi.fn()}
+        onEditGoal={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onDeleteTask={vi.fn()}
+        onCreateTaskForGoal={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark Study security this week complete" }));
+
+    expect(onUpdateGoal).toHaveBeenCalledWith("goal-1", {
+      goalProgress: 1,
+      goalProgressByDate: {
+        "2026-03-17": 1,
+      },
+    });
+  });
+
+  it("lets linked goal tasks be completed, unlinked, or deleted from the goal card", () => {
+    const onUpdateGoal = vi.fn();
+    const onUpdateTask = vi.fn();
+    const onDeleteTask = vi.fn();
+
+    render(
+      <GoalsPage
+        items={[
+          {
+            id: "goal-1",
+            kind: "goal",
+            state: "active",
+            sourceType: "manual",
+            title: "Complete 2 tasks this week",
+            content: "",
+            createdAt: "today",
+            updatedAt: "today",
+            tags: [],
+            project: "",
+            isCompleted: false,
+            priority: "",
+            dueDate: "",
+            completedAt: "",
+            estimate: "",
+            goalMetric: "tasks_completed",
+            goalTarget: 2,
+            goalProgress: 0,
+            goalProgressByDate: {},
+            goalPeriod: "weekly",
+            goalScope: { taskIds: ["task-1"] },
+          },
+          {
+            id: "task-1",
+            kind: "task",
+            state: "active",
+            sourceType: "manual",
+            title: "Review task 1",
+            content: "",
+            createdAt: "today",
+            updatedAt: "today",
+            tags: [],
+            project: "",
+            isCompleted: false,
+            priority: "",
+            dueDate: "",
+            completedAt: "",
+            estimate: "",
+            goalMetric: "tasks_completed",
+            goalTarget: 1,
+            goalProgress: 0,
+            goalProgressByDate: {},
+            goalPeriod: "weekly",
+          },
+        ] as Item[]}
+        projects={[] as Project[]}
+        journalSummaries={[] as JournalEntrySummary[]}
+        todayDate="2026-03-17"
+        selectedGoalId="goal-1"
+        onSelectGoal={vi.fn()}
+        onUpdateGoal={onUpdateGoal}
+        onDeleteGoal={vi.fn()}
+        onEditGoal={vi.fn()}
+        onUpdateTask={onUpdateTask}
+        onDeleteTask={onDeleteTask}
+        onCreateTaskForGoal={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Complete Review task 1" }));
+    expect(onUpdateTask).toHaveBeenCalledWith("task-1", { isCompleted: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "Unlink Review task 1" }));
+    expect(onUpdateGoal).toHaveBeenCalledWith("goal-1", {
+      goalScope: { taskIds: [] },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Review task 1" }));
+    expect(onDeleteTask).toHaveBeenCalledWith("task-1");
+
+    expect(screen.queryByText("Unlink")).not.toBeInTheDocument();
+    expect(screen.queryByText("Delete")).not.toBeInTheDocument();
+  });
+
+  it("shows a quick-add button for task-metric goals", () => {
+    const onCreateTaskForGoal = vi.fn();
+
+    render(
+      <GoalsPage
+        items={[
+          {
+            id: "goal-1",
+            kind: "goal",
+            state: "active",
+            sourceType: "manual",
+            title: "Complete 3 tasks each day",
+            content: "",
+            createdAt: "today",
+            updatedAt: "today",
+            tags: [],
+            project: "",
+            isCompleted: false,
+            priority: "",
+            dueDate: "",
+            completedAt: "",
+            estimate: "",
+            goalMetric: "tasks_completed",
+            goalTarget: 3,
+            goalProgress: 0,
+            goalProgressByDate: {},
+            goalPeriod: "daily",
+          },
+        ] as Item[]}
+        projects={[] as Project[]}
+        journalSummaries={[] as JournalEntrySummary[]}
+        todayDate="2026-03-17"
+        selectedGoalId="goal-1"
+        onSelectGoal={vi.fn()}
+        onUpdateGoal={vi.fn()}
+        onDeleteGoal={vi.fn()}
+        onEditGoal={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onDeleteTask={vi.fn()}
+        onCreateTaskForGoal={onCreateTaskForGoal}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add task to Complete 3 tasks each day" }));
+
+    expect(onCreateTaskForGoal).toHaveBeenCalledWith("goal-1");
+  });
+
+  it("wraps the empty goals state in a centered center-column shell", () => {
+    render(
+      <GoalsPage
+        items={[] as Item[]}
+        projects={[] as Project[]}
+        journalSummaries={[] as JournalEntrySummary[]}
+        todayDate="2026-03-17"
+        selectedGoalId=""
+        onSelectGoal={vi.fn()}
+        onUpdateGoal={vi.fn()}
+        onDeleteGoal={vi.fn()}
+        onEditGoal={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onDeleteTask={vi.fn()}
+        onCreateTaskForGoal={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("goals-empty-shell")).toBeInTheDocument();
+    expect(screen.getByText("No daily goals yet")).toBeInTheDocument();
+  });
+
+  it("keeps goal period filters accessible when the left rail collapses on medium widths", () => {
+    setViewportWidth(1100);
+
+    render(
+      <GoalsPage
+        items={[createGoal()]}
+        projects={[] as Project[]}
+        journalSummaries={[] as JournalEntrySummary[]}
+        todayDate="2026-03-17"
+        selectedGoalId="goal-1"
+        onSelectGoal={vi.fn()}
+        onUpdateGoal={vi.fn()}
+        onDeleteGoal={vi.fn()}
+        onEditGoal={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onDeleteTask={vi.fn()}
+        onCreateTaskForGoal={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("goals-inline-periods")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Daily" })).toHaveClass("is-active");
+    expect(screen.queryByTestId("goals-stacked-insights")).not.toBeInTheDocument();
+  });
+
+  it("moves insights below the main goals column on narrow widths", () => {
+    setViewportWidth(800);
+
+    render(
+      <GoalsPage
+        items={[createGoal()]}
+        projects={[] as Project[]}
+        journalSummaries={[] as JournalEntrySummary[]}
+        todayDate="2026-03-17"
+        selectedGoalId="goal-1"
+        onSelectGoal={vi.fn()}
+        onUpdateGoal={vi.fn()}
+        onDeleteGoal={vi.fn()}
+        onEditGoal={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onDeleteTask={vi.fn()}
+        onCreateTaskForGoal={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("goals-inline-periods")).toBeInTheDocument();
+    expect(screen.getByTestId("goals-stacked-insights")).toBeInTheDocument();
+  });
+});

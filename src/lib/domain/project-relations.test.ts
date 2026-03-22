@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Item } from "../../models/workspace-item";
-import type { Project } from "../../models/project";
-import { defaultProjectBoardLanes } from "../../models/project-board";
+import type { Item } from "@/models/workspace-item";
+import type { Project } from "@/models/project";
+import { defaultProjectBoardLanes } from "@/models/project-board";
 import {
   attachProjectIdsFromNames,
   clearProjectReferences,
