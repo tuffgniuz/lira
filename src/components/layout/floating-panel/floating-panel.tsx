@@ -15,6 +15,7 @@ export function FloatingPanel({
   onClose,
 }: FloatingPanelProps) {
   const panelRef = useRef<HTMLElement | null>(null);
+  const hasInitializedFocus = useRef(false);
 
   useEffect(() => {
     const panel = panelRef.current;
@@ -39,8 +40,11 @@ export function FloatingPanel({
         (element) => !element.hasAttribute("disabled") && element.tabIndex !== -1,
       );
 
-    const focusableElements = getFocusableElements();
-    focusableElements[0]?.focus();
+    if (!hasInitializedFocus.current) {
+      const focusableElements = getFocusableElements();
+      focusableElements[0]?.focus();
+      hasInitializedFocus.current = true;
+    }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {

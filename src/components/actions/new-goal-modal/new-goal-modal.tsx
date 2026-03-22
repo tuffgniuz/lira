@@ -4,13 +4,18 @@ import { ActionBar } from "@/components/actions/action-bar";
 import { FormField } from "@/components/data-input/form-field";
 import { Modal } from "@/components/actions/modal";
 import { Stack } from "@/components/layout/stack";
-import type { GoalMetric, GoalPeriod } from "@/models/workspace-item";
+import type {
+  GoalMetric,
+  GoalMilestone,
+  GoalPeriod,
+  GoalScheduleDay,
+} from "@/models/workspace-item";
 import { inferGoalDraft } from "./goal-draft";
 
-const metricOptions: Array<{ id: GoalMetric | "none"; label: string }> = [
-  { id: "none", label: "No metric" },
-  { id: "tasks_completed", label: "Tasks" },
-];
+const trackingOptions = [
+  { id: "direct", label: "No metric" },
+  { id: "tasks", label: "Tasks" },
+] as const;
 
 const periodOptions: Array<{ id: GoalPeriod; label: string }> = [
   { id: "daily", label: "Daily" },
@@ -19,6 +24,18 @@ const periodOptions: Array<{ id: GoalPeriod; label: string }> = [
   { id: "yearly", label: "Yearly" },
 ];
 
+const weekdayOptions: Array<{ id: GoalScheduleDay; label: string; shortLabel: string }> = [
+  { id: "monday", label: "Monday", shortLabel: "Mon" },
+  { id: "tuesday", label: "Tuesday", shortLabel: "Tue" },
+  { id: "wednesday", label: "Wednesday", shortLabel: "Wed" },
+  { id: "thursday", label: "Thursday", shortLabel: "Thu" },
+  { id: "friday", label: "Friday", shortLabel: "Fri" },
+  { id: "saturday", label: "Saturday", shortLabel: "Sat" },
+  { id: "sunday", label: "Sunday", shortLabel: "Sun" },
+];
+
+type GoalTrackingChoice = "direct" | "tasks" | "milestones";
+
 type GoalDraftSubmit = {
   title: string;
   description: string;
@@ -26,9 +43,14 @@ type GoalDraftSubmit = {
   period: GoalPeriod;
   metric?: GoalMetric;
   projectId: string;
+  scheduleDays: GoalScheduleDay[];
+  milestones: GoalMilestone[];
 };
 
-type InitialGoalDraft = GoalDraftSubmit;
+type InitialGoalDraft = Omit<GoalDraftSubmit, "scheduleDays" | "milestones"> & {
+  scheduleDays?: GoalScheduleDay[];
+  milestones?: GoalMilestone[];
+};
 
 export function NewGoalModal({
   isOpen,
@@ -47,16 +69,14 @@ export function NewGoalModal({
   const [goalSentence, setGoalSentence] = useState("");
   const [projectIdOverride, setProjectIdOverride] = useState<string | null>(null);
   const [periodOverride, setPeriodOverride] = useState<GoalPeriod | null>(null);
-  const [metricOverride, setMetricOverride] = useState<GoalMetric | "none" | null>(null);
+  const [trackingOverride, setTrackingOverride] = useState<GoalTrackingChoice | null>(null);
   const [targetOverride, setTargetOverride] = useState<string>("");
+  const [scheduleDaysOverride, setScheduleDaysOverride] = useState<GoalScheduleDay[] | null>(null);
+  const [milestoneDrafts, setMilestoneDrafts] = useState<GoalMilestone[]>([]);
 
   useEffect(() => {
     if (!isOpen) {
-      setGoalSentence("");
-      setProjectIdOverride(null);
-      setPeriodOverride(null);
-      setMetricOverride(null);
-      setTargetOverride("");
+      resetDraft();
       return;
     }
 
@@ -64,16 +84,16 @@ export function NewGoalModal({
       setGoalSentence(initialGoal.title);
       setProjectIdOverride(initialGoal.projectId);
       setPeriodOverride(initialGoal.period);
-      setMetricOverride(initialGoal.metric ?? "none");
+      setTrackingOverride(resolveInitialTracking(initialGoal));
       setTargetOverride(initialGoal.metric === "tasks_completed" ? String(initialGoal.target) : "");
+      setScheduleDaysOverride(initialGoal.scheduleDays ?? []);
+      setMilestoneDrafts(
+        initialGoal.milestones?.length ? initialGoal.milestones : [createMilestoneDraft()],
+      );
       return;
     }
 
-    setGoalSentence("");
-    setProjectIdOverride(null);
-    setPeriodOverride(null);
-    setMetricOverride(null);
-    setTargetOverride("");
+    resetDraft();
   }, [initialGoal, isOpen]);
 
   if (!isOpen) {
@@ -83,13 +103,37 @@ export function NewGoalModal({
   const inferredDraft = inferGoalDraft(goalSentence, projects);
   const resolvedPeriod = periodOverride ?? inferredDraft.period;
   const resolvedProjectId = projectIdOverride ?? inferredDraft.projectId;
-  const resolvedMetric = resolveMetric(metricOverride, inferredDraft.metric);
+  const resolvedTracking = resolveTracking(
+    trackingOverride,
+    initialGoal,
+    inferredDraft.metric,
+    resolvedPeriod,
+  );
+  const resolvedMetric = resolvedTracking === "tasks" ? "tasks_completed" : undefined;
   const resolvedTarget = resolveTargetValue(
     targetOverride,
     resolvedMetric === "tasks_completed" ? inferredDraft.target : 1,
   );
-  const canSubmit = inferredDraft.title.trim().length > 0;
+  const resolvedScheduleDays =
+    resolvedPeriod === "daily"
+      ? (scheduleDaysOverride ?? weekdayOptions.map((day) => day.id))
+      : [];
+  const normalizedMilestones = normalizeMilestones(milestoneDrafts);
+  const canSubmit =
+    inferredDraft.title.trim().length > 0 &&
+    (resolvedTracking !== "milestones" || normalizedMilestones.length > 0);
   const isEditing = Boolean(initialGoal);
+  const canUseMilestones = resolvedPeriod === "weekly" || resolvedPeriod === "monthly";
+
+  function resetDraft() {
+    setGoalSentence("");
+    setProjectIdOverride(null);
+    setPeriodOverride(null);
+    setTrackingOverride(null);
+    setTargetOverride("");
+    setScheduleDaysOverride(null);
+    setMilestoneDrafts([createMilestoneDraft()]);
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -101,10 +145,13 @@ export function NewGoalModal({
     onSubmit({
       title: inferredDraft.title,
       description: "",
-      target: resolvedTarget,
+      target:
+        resolvedTracking === "milestones" ? Math.max(1, normalizedMilestones.length) : resolvedTarget,
       period: resolvedPeriod,
       metric: resolvedMetric,
       projectId: resolvedProjectId,
+      scheduleDays: resolvedScheduleDays,
+      milestones: resolvedTracking === "milestones" ? normalizedMilestones : [],
     });
   }
 
@@ -141,25 +188,33 @@ export function NewGoalModal({
           </FormField>
 
           <div className="new-goal__section">
-            <p className="new-goal__section-label">Metric</p>
-            <div className="new-goal__choice-row" aria-label="Metric options">
-              {metricOptions.map((option) => (
+            <p className="new-goal__section-label">Track by</p>
+            <div className="new-goal__choice-row" aria-label="Tracking options">
+              {trackingOptions.map((option) => (
                 <button
                   key={option.id}
                   type="button"
-                  className={`new-goal__choice ${
-                    (resolvedMetric ?? "none") === option.id ? "is-active" : ""
-                  }`}
-                  onClick={() => setMetricOverride(option.id)}
-                  aria-pressed={(resolvedMetric ?? "none") === option.id}
+                  className={`new-goal__choice ${resolvedTracking === option.id ? "is-active" : ""}`}
+                  onClick={() => setTrackingOverride(option.id)}
+                  aria-pressed={resolvedTracking === option.id}
                 >
                   {option.label}
                 </button>
               ))}
+              {canUseMilestones ? (
+                <button
+                  type="button"
+                  className={`new-goal__choice ${resolvedTracking === "milestones" ? "is-active" : ""}`}
+                  onClick={() => setTrackingOverride("milestones")}
+                  aria-pressed={resolvedTracking === "milestones"}
+                >
+                  Milestones
+                </button>
+              ) : null}
             </div>
           </div>
 
-          {resolvedMetric === "tasks_completed" ? (
+          {resolvedTracking === "tasks" ? (
             <div className="new-goal__section">
               <p className="new-goal__section-label">Tasks needed</p>
               <input
@@ -184,7 +239,18 @@ export function NewGoalModal({
                   key={option.id}
                   type="button"
                   className={`new-goal__choice ${resolvedPeriod === option.id ? "is-active" : ""}`}
-                  onClick={() => setPeriodOverride(option.id)}
+                  onClick={() => {
+                    setPeriodOverride(option.id);
+
+                    if (option.id === "daily") {
+                      setMilestoneDrafts((current) =>
+                        current.length ? current : [createMilestoneDraft()],
+                      );
+                      if (resolvedTracking === "milestones") {
+                        setTrackingOverride("direct");
+                      }
+                    }
+                  }}
                   aria-pressed={resolvedPeriod === option.id}
                 >
                   {option.label}
@@ -192,6 +258,95 @@ export function NewGoalModal({
               ))}
             </div>
           </div>
+
+          {resolvedPeriod === "daily" ? (
+            <div className="new-goal__section">
+              <p className="new-goal__section-label">Track on</p>
+              <div className="new-goal__weekday-grid" aria-label="Goal weekdays">
+                {weekdayOptions.map((day) => {
+                  const checked = resolvedScheduleDays.includes(day.id);
+
+                  return (
+                    <label key={day.id} className="new-goal__weekday">
+                      <input
+                        type="checkbox"
+                        className="new-goal__weekday-input"
+                        aria-label={day.label}
+                        checked={checked}
+                        onChange={(event) => {
+                          setScheduleDaysOverride((current) => {
+                            const currentDays = current ?? weekdayOptions.map((weekday) => weekday.id);
+
+                            if (event.target.checked) {
+                              return weekdayOptions
+                                .map((weekday) => weekday.id)
+                                .filter((weekday) =>
+                                  weekday === day.id || currentDays.includes(weekday),
+                                );
+                            }
+
+                            return currentDays.filter((weekday) => weekday !== day.id);
+                          });
+                        }}
+                      />
+                      <span className={`new-goal__weekday-chip ${checked ? "is-checked" : ""}`}>
+                        {day.shortLabel}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {resolvedTracking === "milestones" ? (
+            <div className="new-goal__section">
+              <p className="new-goal__section-label">Milestones</p>
+              <div className="new-goal__milestones">
+                {milestoneDrafts.map((milestone, index) => (
+                  <div key={milestone.id} className="new-goal__milestone-row">
+                    <input
+                      value={milestone.title}
+                      onChange={(event) =>
+                        setMilestoneDrafts((current) =>
+                          current.map((candidate) =>
+                            candidate.id === milestone.id
+                              ? { ...candidate, title: event.target.value }
+                              : candidate,
+                          ),
+                        )
+                      }
+                      className="new-goal__target-input"
+                      aria-label={`Milestone ${index + 1}`}
+                      placeholder="Add milestone"
+                    />
+                    <button
+                      type="button"
+                      className="new-goal__choice"
+                      onClick={() =>
+                        setMilestoneDrafts((current) =>
+                          current.length > 1
+                            ? current.filter((candidate) => candidate.id !== milestone.id)
+                            : [createMilestoneDraft()],
+                        )
+                      }
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="new-goal__choice new-goal__milestone-add"
+                onClick={() =>
+                  setMilestoneDrafts((current) => [...current, createMilestoneDraft()])
+                }
+              >
+                Add milestone
+              </button>
+            </div>
+          ) : null}
 
           <div className="new-goal__section">
             <p className="new-goal__section-label">Project</p>
@@ -233,19 +388,34 @@ export function NewGoalModal({
   );
 }
 
-function resolveMetric(
-  metricOverride: GoalMetric | "none" | null,
+function resolveTracking(
+  trackingOverride: GoalTrackingChoice | null,
+  initialGoal: InitialGoalDraft | undefined,
+  inferredMetric: GoalMetric | undefined,
+  period: GoalPeriod,
+): GoalTrackingChoice {
+  const baseTracking = trackingOverride ?? resolveInitialTracking(initialGoal, inferredMetric);
+
+  if (period === "daily" && baseTracking === "milestones") {
+    return "direct";
+  }
+
+  return baseTracking;
+}
+
+function resolveInitialTracking(
+  initialGoal?: Pick<GoalDraftSubmit, "metric" | "milestones">,
   inferredMetric?: GoalMetric,
-): GoalMetric | undefined {
-  if (metricOverride === "none") {
-    return undefined;
+): GoalTrackingChoice {
+  if (initialGoal?.milestones?.length) {
+    return "milestones";
   }
 
-  if (metricOverride === "tasks_completed") {
-    return "tasks_completed";
+  if (initialGoal?.metric === "tasks_completed" || inferredMetric === "tasks_completed") {
+    return "tasks";
   }
 
-  return inferredMetric;
+  return "direct";
 }
 
 function resolveTargetValue(targetOverride: string, inferredTarget: number) {
@@ -262,4 +432,26 @@ function resolveTargetValue(targetOverride: string, inferredTarget: number) {
   }
 
   return parsed;
+}
+
+function createMilestoneDraft(): GoalMilestone {
+  return {
+    id: `goal-milestone-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title: "",
+    isCompleted: false,
+    completedAt: "",
+  };
+}
+
+function normalizeMilestones(milestones: GoalMilestone[]) {
+  return milestones
+    .map((milestone, index) => ({
+      ...milestone,
+      title: milestone.title.trim(),
+      isCompleted: Boolean(milestone.isCompleted),
+      completedAt: milestone.completedAt ?? "",
+      sortOrder: index,
+    }))
+    .filter((milestone) => milestone.title.length > 0)
+    .map(({ sortOrder: _sortOrder, ...milestone }) => milestone);
 }

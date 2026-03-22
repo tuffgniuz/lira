@@ -1,14 +1,31 @@
 import type { Item } from "@/models/workspace-item";
 import type { JournalEntrySummary } from "@/models/journal";
+import {
+  formatGoalMetricLabel,
+  getCurrentGoalWeekDays,
+  resolveGoalWeekDayStatus,
+} from "./goal-display";
 import { resolveGoalProgress } from "./goal-progress";
+
+export type RightRailGoalWeekDay = {
+  date: string;
+  label: string;
+  shortLabel: string;
+  status: {
+    kind: "met" | "missed" | "pending" | "off-day";
+    label: string;
+    symbol: string;
+  };
+};
 
 export type RightRailGoal = {
   id: string;
   title: string;
-  projectLabel: string;
+  metaLabel: string;
   completedCount: number;
   progressDenominator: number;
   progressPercent: number;
+  weekDays: RightRailGoalWeekDay[];
 };
 
 export type RightRailContext = {
@@ -37,14 +54,32 @@ export function buildRightRailContext(
         journalSummaries,
         todayDate,
       });
+      const metricLabel = formatGoalMetricLabel(goal);
+      const metaLabel = goal.project ? `${goal.project} • ${metricLabel}` : metricLabel;
+      const weekDays = getCurrentGoalWeekDays(todayDate).map((day) => ({
+        date: day.date,
+        label: day.label,
+        shortLabel: day.shortLabel,
+        status: resolveGoalWeekDayStatus(
+          goal,
+          {
+            items,
+            journalSummaries,
+            todayDate,
+          },
+          day.date,
+          todayDate,
+        ),
+      }));
 
       return {
         id: goal.id,
         title: goal.title,
-        projectLabel: goal.project,
+        metaLabel,
         completedCount: progress.completedCount,
         progressDenominator: progress.progressDenominator,
         progressPercent: progress.progressPercent,
+        weekDays,
       };
     });
 

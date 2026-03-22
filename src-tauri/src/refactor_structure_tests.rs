@@ -30,11 +30,14 @@ fn exposes_refactored_backend_modules_for_commands_and_transport_types() {
         estimate: String::new(),
         schedule_bucket: None,
         source_capture_id: None,
+        custom_field_values: std::collections::HashMap::new(),
         goal_metric: None,
         goal_target: 1,
         goal_progress: 0,
         goal_progress_by_date: std::collections::HashMap::new(),
         goal_period: "weekly".into(),
+        goal_schedule_days: Vec::new(),
+        goal_milestones: Vec::new(),
         goal_scope: None,
     };
 

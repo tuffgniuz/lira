@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { GoalsPage } from "./goals-page";
 import type { Item } from "@/models/workspace-item";
@@ -79,7 +79,7 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
-        onCreateTaskForGoal={vi.fn()}
+        onNotify={vi.fn()}
       />,
     );
 
@@ -126,7 +126,7 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
-        onCreateTaskForGoal={vi.fn()}
+        onNotify={vi.fn()}
       />,
     );
 
@@ -204,7 +204,7 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onUpdateTask={onUpdateTask}
         onDeleteTask={onDeleteTask}
-        onCreateTaskForGoal={vi.fn()}
+        onNotify={vi.fn()}
       />,
     );
 
@@ -223,9 +223,7 @@ describe("GoalsPage", () => {
     expect(screen.queryByText("Delete")).not.toBeInTheDocument();
   });
 
-  it("shows a quick-add button for task-metric goals", () => {
-    const onCreateTaskForGoal = vi.fn();
-
+  it("does not show a quick-add button for task-metric goals", () => {
     render(
       <GoalsPage
         items={[
@@ -262,13 +260,111 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
-        onCreateTaskForGoal={onCreateTaskForGoal}
+        onNotify={vi.fn()}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Add task to Complete 3 tasks each day" }));
+    expect(
+      screen.queryByRole("button", { name: "Add task to Complete 3 tasks each day" }),
+    ).not.toBeInTheDocument();
+  });
 
-    expect(onCreateTaskForGoal).toHaveBeenCalledWith("goal-1");
+  it("shows a weekly day strip for daily goals with met, missed, pending, and off-day states", () => {
+    render(
+      <GoalsPage
+        items={[
+          createGoal({
+            title: "Complete the daily practice",
+            goalPeriod: "daily",
+            goalMetric: undefined,
+            goalTarget: 1,
+            goalScheduleDays: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+            goalProgressByDate: {
+              "2026-03-16": 1,
+            },
+          }),
+        ] as Item[]}
+        projects={[] as Project[]}
+        journalSummaries={[] as JournalEntrySummary[]}
+        todayDate="2026-03-18"
+        selectedGoalId="goal-1"
+        onSelectGoal={vi.fn()}
+        onUpdateGoal={vi.fn()}
+        onDeleteGoal={vi.fn()}
+        onEditGoal={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onDeleteTask={vi.fn()}
+        onNotify={vi.fn()}
+      />,
+    );
+
+    const goalCard = screen.getByRole("article");
+    const weekStripQueries = within(goalCard);
+
+    expect(weekStripQueries.getByText("Mon")).toBeInTheDocument();
+    expect(weekStripQueries.getByText("Tue")).toBeInTheDocument();
+    expect(weekStripQueries.getByText("Wed")).toBeInTheDocument();
+    expect(weekStripQueries.getByText("Thu")).toBeInTheDocument();
+    expect(weekStripQueries.getByText("Fri")).toBeInTheDocument();
+    expect(weekStripQueries.getByText("Sat")).toBeInTheDocument();
+    expect(weekStripQueries.getByText("Sun")).toBeInTheDocument();
+    expect(weekStripQueries.getByLabelText("Monday status: met")).toBeInTheDocument();
+    expect(weekStripQueries.getByLabelText("Tuesday status: missed")).toBeInTheDocument();
+    expect(weekStripQueries.getByLabelText("Wednesday status: pending")).toBeInTheDocument();
+    expect(weekStripQueries.getByLabelText("Saturday status: off day")).toBeInTheDocument();
+  });
+
+  it("renders milestone goals and toggles milestone completion", () => {
+    const onUpdateGoal = vi.fn();
+
+    render(
+      <GoalsPage
+        items={[
+          createGoal({
+            title: "Ship the monthly review",
+            goalMetric: undefined,
+            goalTarget: 2,
+            goalPeriod: "monthly",
+            goalMilestones: [
+              { id: "milestone-1", title: "Draft review", isCompleted: false, completedAt: "" },
+              { id: "milestone-2", title: "Publish review", isCompleted: true, completedAt: "2026-03-18" },
+            ],
+          }),
+        ] as Item[]}
+        projects={[] as Project[]}
+        journalSummaries={[] as JournalEntrySummary[]}
+        todayDate="2026-03-22"
+        selectedGoalId="goal-1"
+        onSelectGoal={vi.fn()}
+        onUpdateGoal={onUpdateGoal}
+        onDeleteGoal={vi.fn()}
+        onEditGoal={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onDeleteTask={vi.fn()}
+        onNotify={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("checkbox", { name: "Complete milestone Draft review" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Complete milestone Publish review" })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Complete milestone Draft review" }));
+
+    expect(onUpdateGoal).toHaveBeenCalledWith("goal-1", {
+      goalMilestones: [
+        expect.objectContaining({
+          id: "milestone-1",
+          title: "Draft review",
+          isCompleted: true,
+        }),
+        expect.objectContaining({
+          id: "milestone-2",
+          title: "Publish review",
+          isCompleted: true,
+        }),
+      ],
+      goalProgress: 2,
+    });
   });
 
   it("wraps the empty goals state in a centered center-column shell", () => {
@@ -285,7 +381,7 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
-        onCreateTaskForGoal={vi.fn()}
+        onNotify={vi.fn()}
       />,
     );
 
@@ -309,7 +405,7 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
-        onCreateTaskForGoal={vi.fn()}
+        onNotify={vi.fn()}
       />,
     );
 
@@ -334,7 +430,7 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
-        onCreateTaskForGoal={vi.fn()}
+        onNotify={vi.fn()}
       />,
     );
 

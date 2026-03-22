@@ -94,7 +94,7 @@ export function useProjectBoardNavigation<
   }, [activeLaneId, laneModalOpen]);
 
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
+    function processKey(event: KeyboardEvent) {
       if (laneModalOpen || !boardLanes.length) {
         return;
       }
@@ -144,8 +144,7 @@ export function useProjectBoardNavigation<
 
       const isPreviousLaneMotion =
         event.key === "h" ||
-        event.key === "ArrowLeft" ||
-        (event.key === "Tab" && event.shiftKey);
+        event.key === "ArrowLeft";
       const isNextLaneMotion =
         event.key === "l" ||
         event.key === "ArrowRight" ||
@@ -164,10 +163,23 @@ export function useProjectBoardNavigation<
       setActiveLaneId(boardLanes[nextIndex].id);
     }
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Tab") return; // Handled in capture phase
+      processKey(event);
+    }
+
+    function handleTabCapture(event: KeyboardEvent) {
+      if (event.key === "Tab") {
+        processKey(event);
+      }
+    }
+
     window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleTabCapture, true);
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keydown", handleTabCapture, true);
     };
   }, [
     activeLaneId,

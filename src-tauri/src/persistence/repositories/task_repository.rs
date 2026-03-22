@@ -23,8 +23,8 @@ impl<'a> TaskRepository<'a> {
                 INSERT INTO tasks (
                     id, title, description, lifecycle_status, is_completed, schedule_bucket,
                     priority, due_at, completed_at, estimate_minutes, project_id, project_lane_id,
-                    source_capture_id, created_at, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+                    source_capture_id, custom_field_values_json, created_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
                 ",
                 params![
                     task.id,
@@ -40,6 +40,7 @@ impl<'a> TaskRepository<'a> {
                     task.project_id,
                     task.project_lane_id,
                     task.source_capture_id,
+                    serialize_custom_field_values(&task.custom_field_values)?,
                     task.created_at,
                     task.updated_at
                 ],
@@ -66,8 +67,9 @@ impl<'a> TaskRepository<'a> {
                     project_id = ?11,
                     project_lane_id = ?12,
                     source_capture_id = ?13,
-                    created_at = ?14,
-                    updated_at = ?15
+                    custom_field_values_json = ?14,
+                    created_at = ?15,
+                    updated_at = ?16
                 WHERE id = ?1
                 ",
                 params![
@@ -84,6 +86,7 @@ impl<'a> TaskRepository<'a> {
                     task.project_id,
                     task.project_lane_id,
                     task.source_capture_id,
+                    serialize_custom_field_values(&task.custom_field_values)?,
                     task.created_at,
                     task.updated_at
                 ],
@@ -99,7 +102,8 @@ impl<'a> TaskRepository<'a> {
             .query_row(
                 "
                 SELECT id, title, description, lifecycle_status, is_completed, schedule_bucket, priority,
-                       due_at, completed_at, estimate_minutes, project_id, project_lane_id, source_capture_id, created_at, updated_at
+                       due_at, completed_at, estimate_minutes, project_id, project_lane_id,
+                       source_capture_id, custom_field_values_json, created_at, updated_at
                 FROM tasks
                 WHERE id = ?1
                 ",
@@ -117,7 +121,8 @@ impl<'a> TaskRepository<'a> {
             .prepare(
                 "
                 SELECT id, title, description, lifecycle_status, is_completed, schedule_bucket, priority,
-                       due_at, completed_at, estimate_minutes, project_id, project_lane_id, source_capture_id, created_at, updated_at
+                       due_at, completed_at, estimate_minutes, project_id, project_lane_id,
+                       source_capture_id, custom_field_values_json, created_at, updated_at
                 FROM tasks
                 WHERE (?1 IS NULL OR lifecycle_status = ?1)
                   AND (?2 IS NULL OR is_completed = ?2)
@@ -170,6 +175,8 @@ impl<'a> TaskRepository<'a> {
 }
 
 fn map_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
+    let custom_field_values_json: String = row.get(13)?;
+
     Ok(Task {
         id: row.get(0)?,
         title: row.get(1)?,
@@ -184,7 +191,25 @@ fn map_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         project_id: option_string(row, 10)?,
         project_lane_id: option_string(row, 11)?,
         source_capture_id: option_string(row, 12)?,
-        created_at: row.get(13)?,
-        updated_at: row.get(14)?,
+        custom_field_values: deserialize_custom_field_values(&custom_field_values_json)
+            .map_err(to_sql_error)?,
+        created_at: row.get(14)?,
+        updated_at: row.get(15)?,
     })
+}
+
+fn serialize_custom_field_values(
+    custom_field_values: &std::collections::HashMap<String, String>,
+) -> Result<String, String> {
+    serde_json::to_string(custom_field_values).map_err(|error| error.to_string())
+}
+
+fn deserialize_custom_field_values(
+    custom_field_values_json: &str,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    if custom_field_values_json.trim().is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    serde_json::from_str(custom_field_values_json).map_err(|error| error.to_string())
 }

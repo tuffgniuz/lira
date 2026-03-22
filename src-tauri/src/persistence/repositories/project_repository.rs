@@ -1,5 +1,7 @@
 use crate::persistence::database::Database;
-use crate::persistence::models::{Project, ProjectBoardLane, ProjectStatus};
+use crate::persistence::models::{
+    Project, ProjectBoardLane, ProjectStatus, ProjectTaskTemplate,
+};
 use crate::persistence::support::{decode_enum, encode_enum, option_string, to_sql_error};
 use rusqlite::params;
 
@@ -33,7 +35,7 @@ impl<'a> ProjectRepository<'a> {
     }
 
     pub fn create(&self, project: Project) -> Result<(), String> {
-        let board_lanes = if project.board_lanes.is_empty() {
+        let board_lanes = if project.has_kanban_board && project.board_lanes.is_empty() {
             default_project_board_lanes(&project.id)
         } else {
             project.board_lanes.clone()
@@ -43,14 +45,18 @@ impl<'a> ProjectRepository<'a> {
             .connection()
             .execute(
                 "
-                INSERT INTO projects (id, name, description, status, created_at, updated_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                INSERT INTO projects (
+                    id, name, description, status, has_kanban_board, task_template_json, created_at, updated_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                 ",
                 params![
                     project.id,
                     project.name,
                     project.description,
                     encode_enum(&project.status)?,
+                    project.has_kanban_board,
+                    serialize_task_template(project.task_template.as_ref())?,
                     project.created_at,
                     project.updated_at
                 ],
@@ -62,7 +68,7 @@ impl<'a> ProjectRepository<'a> {
 
     #[cfg(test)]
     pub fn update(&self, project: Project) -> Result<(), String> {
-        let board_lanes = if project.board_lanes.is_empty() {
+        let board_lanes = if project.has_kanban_board && project.board_lanes.is_empty() {
             default_project_board_lanes(&project.id)
         } else {
             project.board_lanes.clone()
@@ -73,7 +79,13 @@ impl<'a> ProjectRepository<'a> {
             .execute(
                 "
                 UPDATE projects
-                SET name = ?2, description = ?3, status = ?4, created_at = ?5, updated_at = ?6
+                SET name = ?2,
+                    description = ?3,
+                    status = ?4,
+                    has_kanban_board = ?5,
+                    task_template_json = ?6,
+                    created_at = ?7,
+                    updated_at = ?8
                 WHERE id = ?1
                 ",
                 params![
@@ -81,6 +93,8 @@ impl<'a> ProjectRepository<'a> {
                     project.name,
                     project.description,
                     encode_enum(&project.status)?,
+                    project.has_kanban_board,
+                    serialize_task_template(project.task_template.as_ref())?,
                     project.created_at,
                     project.updated_at
                 ],
@@ -96,7 +110,7 @@ impl<'a> ProjectRepository<'a> {
             .connection()
             .prepare(
                 "
-                SELECT id, name, description, status, created_at, updated_at
+                SELECT id, name, description, status, has_kanban_board, task_template_json, created_at, updated_at
                 FROM projects
                 ORDER BY created_at DESC
                 ",
@@ -105,14 +119,19 @@ impl<'a> ProjectRepository<'a> {
 
         let rows = statement
             .query_map([], |row| {
+                let task_template_json: Option<String> = row.get(5)?;
+
                 Ok(Project {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     description: option_string(row, 2)?,
                     status: decode_enum::<ProjectStatus>(row.get(3)?).map_err(to_sql_error)?,
+                    has_kanban_board: row.get(4)?,
+                    task_template: deserialize_task_template(task_template_json)
+                        .map_err(to_sql_error)?,
                     board_lanes: Vec::new(),
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
                 })
             })
             .map_err(|error| error.to_string())?;
@@ -123,7 +142,7 @@ impl<'a> ProjectRepository<'a> {
 
         for project in &mut projects {
             let lanes = self.list_board_lanes(&project.id)?;
-            project.board_lanes = if lanes.is_empty() {
+            project.board_lanes = if project.has_kanban_board && lanes.is_empty() {
                 default_project_board_lanes(&project.id)
             } else {
                 lanes
@@ -202,4 +221,20 @@ impl<'a> ProjectRepository<'a> {
 
         Ok(())
     }
+}
+
+fn serialize_task_template(task_template: Option<&ProjectTaskTemplate>) -> Result<Option<String>, String> {
+    task_template
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|error| error.to_string())
+}
+
+fn deserialize_task_template(
+    task_template_json: Option<String>,
+) -> Result<Option<ProjectTaskTemplate>, String> {
+    task_template_json
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| serde_json::from_str(&value).map_err(|error| error.to_string()))
+        .transpose()
 }

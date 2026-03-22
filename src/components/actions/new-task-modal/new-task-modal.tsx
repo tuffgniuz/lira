@@ -10,15 +10,14 @@ export function NewTaskModal({
   initialGoalId,
   projects,
   onSubmit,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  goals: Array<{
-    id: string;
-    title: string;
-    remainingSlots: number;
-    projectId?: string;
-  }>;
+  }: {
+    isOpen: boolean;
+    onClose: () => void;
+    goals: Array<{
+      id: string;
+      title: string;
+      projectId?: string;
+    }>;
   initialGoalId?: string;
   projects: Array<{ id: string; name: string }>;
   onSubmit: (task: {
@@ -179,7 +178,6 @@ export function NewTaskModal({
                   }
                 }}
                 aria-pressed={goalId === goal.id}
-                disabled={goal.remainingSlots <= 0}
               >
                 {goal.title}
               </button>

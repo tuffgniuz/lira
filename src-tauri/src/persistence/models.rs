@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -27,6 +28,34 @@ pub struct ProjectBoardLane {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectTaskTemplateFieldType {
+    Text,
+    Boolean,
+    Number,
+    Date,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectTaskTemplateField {
+    pub id: String,
+    pub key: String,
+    pub label: String,
+    #[serde(default = "default_project_task_template_field_type")]
+    pub field_type: ProjectTaskTemplateFieldType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectTaskTemplate {
+    #[serde(default)]
+    pub fields: Vec<ProjectTaskTemplateField>,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
     pub id: String,
@@ -42,6 +71,8 @@ pub struct Task {
     pub project_id: Option<String>,
     pub project_lane_id: Option<String>,
     pub source_capture_id: Option<String>,
+    #[serde(default)]
+    pub custom_field_values: HashMap<String, String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -121,10 +152,26 @@ pub struct Goal {
     pub scope_project_id: Option<String>,
     pub scope_tag: Option<String>,
     pub source_query: Option<String>,
+    #[serde(default)]
+    pub schedule_days: Vec<String>,
+    #[serde(default)]
+    pub milestones: Vec<GoalMilestone>,
     pub created_at: String,
     pub updated_at: String,
     pub archived_at: Option<String>,
     pub completed_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GoalMilestone {
+    pub id: String,
+    pub title: String,
+    pub sort_order: i64,
+    pub is_completed: bool,
+    pub completed_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -187,6 +234,9 @@ pub struct Project {
     pub name: String,
     pub description: Option<String>,
     pub status: ProjectStatus,
+    pub has_kanban_board: bool,
+    #[serde(default)]
+    pub task_template: Option<ProjectTaskTemplate>,
     pub board_lanes: Vec<ProjectBoardLane>,
     pub created_at: String,
     pub updated_at: String,
@@ -246,4 +296,8 @@ pub struct JournalEntrySummary {
     pub entry_date: String,
     pub title: Option<String>,
     pub preview: String,
+}
+
+fn default_project_task_template_field_type() -> ProjectTaskTemplateFieldType {
+    ProjectTaskTemplateFieldType::Text
 }

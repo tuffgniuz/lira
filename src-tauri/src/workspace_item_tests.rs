@@ -49,6 +49,54 @@ fn deserializes_current_frontend_goal_shape_and_maps_to_goal_model() {
 }
 
 #[test]
+fn preserves_goal_schedule_days_and_milestones_across_workspace_mapping() {
+    let dto: WorkspaceItemDto = serde_json::from_value(json!({
+        "id": "goal-1",
+        "kind": "goal",
+        "state": "active",
+        "sourceType": "manual",
+        "title": "Ship the monthly review",
+        "content": "",
+        "createdAt": "just now",
+        "updatedAt": "just now",
+        "tags": [],
+        "project": "",
+        "isCompleted": false,
+        "priority": "",
+        "dueDate": "",
+        "completedAt": "",
+        "estimate": "",
+        "goalTarget": 2,
+        "goalProgress": 1,
+        "goalProgressByDate": {},
+        "goalPeriod": "monthly",
+        "goalScheduleDays": ["monday", "wednesday"],
+        "goalMilestones": [
+            {
+                "id": "milestone-1",
+                "title": "Draft review",
+                "isCompleted": true,
+                "completedAt": "2026-03-18"
+            },
+            {
+                "id": "milestone-2",
+                "title": "Publish review",
+                "isCompleted": false,
+                "completedAt": ""
+            }
+        ]
+    }))
+    .expect("goal DTO should deserialize");
+
+    let goal = goal_from_workspace_item(dto).expect("workspace goal should convert to backend goal");
+
+    assert_eq!(goal.schedule_days, vec!["monday", "wednesday"]);
+    assert_eq!(goal.milestones.len(), 2);
+    assert_eq!(goal.milestones[0].title, "Draft review");
+    assert!(goal.milestones[0].is_completed);
+}
+
+#[test]
 fn preserves_task_and_goal_workspace_state_across_replace_and_load() {
     let db = Database::in_memory().expect("in-memory database should initialize");
     ProjectRepository::new(&db)
@@ -57,6 +105,8 @@ fn preserves_task_and_goal_workspace_state_across_replace_and_load() {
             name: "Lira".into(),
             description: Some("Workspace".into()),
             status: ProjectStatus::Active,
+            has_kanban_board: true,
+            task_template: None,
             board_lanes: vec![
                 ProjectBoardLane {
                     id: "project-1-lane-to-do".into(),
@@ -124,7 +174,11 @@ fn preserves_task_and_goal_workspace_state_across_replace_and_load() {
             "goalProgressByDate": {},
             "goalPeriod": "weekly",
             "scheduleBucket": "upcoming",
-            "sourceCaptureId": "capture-1"
+            "sourceCaptureId": "capture-1",
+            "customFieldValues": {
+                "task_id": "TASK-88",
+                "stage_uuid": "stage-uuid-88"
+            }
         },
         {
             "id": "goal-1",
@@ -176,6 +230,13 @@ fn preserves_task_and_goal_workspace_state_across_replace_and_load() {
     assert_eq!(
         serde_json::to_value(task).expect("task should serialize")["projectLaneId"],
         json!("project-1-lane-in-progress")
+    );
+    assert_eq!(
+        serde_json::to_value(task).expect("task should serialize")["customFieldValues"],
+        json!({
+            "task_id": "TASK-88",
+            "stage_uuid": "stage-uuid-88"
+        })
     );
     assert_eq!(goal.tags, vec!["quarterly"]);
     assert_eq!(

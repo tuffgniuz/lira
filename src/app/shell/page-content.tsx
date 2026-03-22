@@ -30,7 +30,6 @@ type PageContentProps = {
   onUpdateGoal: (goalId: string, updates: Partial<Item>) => void;
   onDeleteGoal: (goalId: string) => void;
   onEditGoal: (goalId: string) => void;
-  onCreateTaskForGoal: (goalId: string) => void;
   onCreateTask: (task: {
     title: string;
     description: string;
@@ -47,8 +46,9 @@ type PageContentProps = {
   onUpdateProject: (projectId: string, updates: Partial<Project>) => void;
   onUpdateJournalEntry: (updates: Partial<JournalEntry>) => void;
   onSelectJournalDate: (date: string) => void;
-  onConvertCaptureToTask: (captureId: string) => void;
-  onConvertCaptureToGoal: (captureId: string) => void;
+  onCreateCapture: (value: string) => void;
+  onConvertCaptureToTask: (captureId: string, projectId?: string) => void;
+  onConvertCaptureToGoal: (captureId: string, projectId?: string) => void;
   onUpdateCaptureState: (
     captureId: string,
     state: Extract<Item["state"], "inbox" | "someday" | "active" | "archived">,
@@ -73,7 +73,6 @@ export function PageContent({
   onUpdateGoal,
   onDeleteGoal,
   onEditGoal,
-  onCreateTaskForGoal,
   onCreateTask,
   onSelectTask,
   onOpenProjectTask,
@@ -83,6 +82,7 @@ export function PageContent({
   onUpdateProject,
   onUpdateJournalEntry,
   onSelectJournalDate,
+  onCreateCapture,
   onConvertCaptureToTask,
   onConvertCaptureToGoal,
   onUpdateCaptureState,
@@ -107,6 +107,8 @@ export function PageContent({
     return (
       <CaptureInboxPage
         captures={buildInboxCaptureViews(items, projects)}
+        projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+        onCreateCapture={onCreateCapture}
         onConvertCaptureToTask={onConvertCaptureToTask}
         onConvertCaptureToGoal={onConvertCaptureToGoal}
         onUpdateCaptureState={onUpdateCaptureState}
@@ -130,7 +132,7 @@ export function PageContent({
         onEditGoal={onEditGoal}
         onUpdateTask={onUpdateTask}
         onDeleteTask={onDeleteTask}
-        onCreateTaskForGoal={onCreateTaskForGoal}
+        onNotify={onNotify}
       />
     );
   }
@@ -148,6 +150,7 @@ export function PageContent({
             onBack={() => onCloseTaskDetail("tasks")}
             onUpdateTask={onUpdateTask}
             onDeleteTask={onDeleteTask}
+            onNotify={onNotify}
           />
         ) : (
           <TasksPage
@@ -155,6 +158,7 @@ export function PageContent({
             projects={projects}
             onSelectTask={onSelectTask}
             onDeleteTask={onDeleteTask}
+            onNotify={onNotify}
           />
         )
       ) : (
@@ -163,6 +167,7 @@ export function PageContent({
           projects={projects}
           onSelectTask={onSelectTask}
           onDeleteTask={onDeleteTask}
+          onNotify={onNotify}
         />
       )
     );
@@ -197,14 +202,19 @@ export function PageContent({
             onBack={() => onCloseTaskDetail("projects")}
             onUpdateTask={onUpdateTask}
             onDeleteTask={onDeleteTask}
+            onNotify={onNotify}
           />
         ) : (
           <ProjectsPage
             projects={projects}
             items={items}
+            journalSummaries={journalSummaries}
+            todayDate={todayDate}
             selectedProjectId={selectedProjectId}
             onUpdateProject={onUpdateProject}
             onUpdateTask={onUpdateTask}
+            onDeleteTask={onDeleteTask}
+            onNotify={onNotify}
             onCreateTask={onCreateTask}
             onSelectTask={onOpenProjectTask}
           />
@@ -213,9 +223,13 @@ export function PageContent({
         <ProjectsPage
           projects={projects}
           items={items}
+          journalSummaries={journalSummaries}
+          todayDate={todayDate}
           selectedProjectId={selectedProjectId}
           onUpdateProject={onUpdateProject}
           onUpdateTask={onUpdateTask}
+          onDeleteTask={onDeleteTask}
+          onNotify={onNotify}
           onCreateTask={onCreateTask}
           onSelectTask={onOpenProjectTask}
         />

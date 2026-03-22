@@ -23,6 +23,8 @@ pub fn run_migrations(connection: &Connection) -> Result<(), String> {
                 name TEXT NOT NULL,
                 description TEXT,
                 status TEXT NOT NULL,
+                has_kanban_board INTEGER NOT NULL DEFAULT 1,
+                task_template_json TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -49,6 +51,7 @@ pub fn run_migrations(connection: &Connection) -> Result<(), String> {
                 project_id TEXT,
                 project_lane_id TEXT,
                 source_capture_id TEXT,
+                custom_field_values_json TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE SET NULL,
@@ -89,6 +92,25 @@ pub fn run_migrations(connection: &Connection) -> Result<(), String> {
                 source_entity_type TEXT,
                 source_entity_id TEXT,
                 created_at TEXT NOT NULL,
+                FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS goal_schedule_days (
+                goal_id TEXT NOT NULL,
+                weekday TEXT NOT NULL,
+                PRIMARY KEY(goal_id, weekday),
+                FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS goal_milestones (
+                id TEXT PRIMARY KEY,
+                goal_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                sort_order INTEGER NOT NULL,
+                is_completed INTEGER NOT NULL DEFAULT 0,
+                completed_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
                 FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE
             );
 
@@ -162,8 +184,21 @@ pub fn run_migrations(connection: &Connection) -> Result<(), String> {
     add_column_if_missing(connection, "tasks", "project_id", "TEXT")?;
     add_column_if_missing(connection, "tasks", "project_lane_id", "TEXT")?;
     add_column_if_missing(connection, "tasks", "source_capture_id", "TEXT")?;
+    add_column_if_missing(
+        connection,
+        "tasks",
+        "custom_field_values_json",
+        "TEXT NOT NULL DEFAULT '{}'",
+    )?;
     migrate_legacy_task_status_column(connection)?;
-    add_column_if_missing(connection, "goals", "scope_tag", "TEXT")
+    add_column_if_missing(connection, "goals", "scope_tag", "TEXT")?;
+    add_column_if_missing(
+        connection,
+        "projects",
+        "has_kanban_board",
+        "INTEGER NOT NULL DEFAULT 1",
+    )?;
+    add_column_if_missing(connection, "projects", "task_template_json", "TEXT")
 }
 
 fn add_column_if_missing(
@@ -229,6 +264,7 @@ fn migrate_legacy_task_status_column(connection: &Connection) -> Result<(), Stri
                 project_id TEXT,
                 project_lane_id TEXT,
                 source_capture_id TEXT,
+                custom_field_values_json TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE SET NULL,
@@ -238,7 +274,7 @@ fn migrate_legacy_task_status_column(connection: &Connection) -> Result<(), Stri
             INSERT INTO tasks_migrated (
                 id, title, description, lifecycle_status, is_completed, schedule_bucket,
                 priority, due_at, completed_at, estimate_minutes, project_id, project_lane_id, source_capture_id,
-                created_at, updated_at
+                custom_field_values_json, created_at, updated_at
             )
             SELECT
                 id,
@@ -254,6 +290,7 @@ fn migrate_legacy_task_status_column(connection: &Connection) -> Result<(), Stri
                 project_id,
                 NULL,
                 source_capture_id,
+                '{}',
                 created_at,
                 updated_at
             FROM tasks;

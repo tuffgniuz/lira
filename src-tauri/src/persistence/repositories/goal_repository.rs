@@ -1,7 +1,9 @@
 use crate::persistence::database::Database;
-use crate::persistence::models::{Goal, GoalProgressEntry, GoalStatus, GoalTrackingMode, GoalType};
+use crate::persistence::models::{
+    Goal, GoalMilestone, GoalProgressEntry, GoalStatus, GoalTrackingMode, GoalType,
+};
 use crate::persistence::support::{decode_enum, encode_enum, option_string, to_sql_error};
-use rusqlite::params;
+use rusqlite::{params, Transaction};
 
 #[cfg(test)]
 use rusqlite::OptionalExtension;
@@ -16,47 +18,27 @@ impl<'a> GoalRepository<'a> {
     }
 
     pub fn create(&self, goal: Goal) -> Result<(), String> {
-        self.db
+        let transaction = self
+            .db
             .connection()
-            .execute(
-                "
-                INSERT INTO goals (
-                    id, title, description, goal_type, status, tracking_mode, metric, target_value, current_value,
-                    period_unit, period_start, period_end, starts_at, ends_at, scope_project_id, scope_tag, source_query,
-                    created_at, updated_at, archived_at, completed_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
-                ",
-                params![
-                    goal.id,
-                    goal.title,
-                    goal.description,
-                    encode_enum(&goal.goal_type)?,
-                    encode_enum(&goal.status)?,
-                    encode_enum(&goal.tracking_mode)?,
-                    goal.metric,
-                    goal.target_value,
-                    goal.current_value,
-                    goal.period_unit,
-                    goal.period_start,
-                    goal.period_end,
-                    goal.starts_at,
-                    goal.ends_at,
-                    goal.scope_project_id,
-                    goal.scope_tag,
-                    goal.source_query,
-                    goal.created_at,
-                    goal.updated_at,
-                    goal.archived_at,
-                    goal.completed_at
-                ],
-            )
-            .map(|_| ())
-            .map_err(|error| error.to_string())
+            .unchecked_transaction()
+            .map_err(|error| error.to_string())?;
+
+        insert_goal(&transaction, &goal)?;
+        replace_schedule_days(&transaction, &goal.id, &goal.schedule_days)?;
+        replace_milestones(&transaction, &goal.id, &goal.milestones)?;
+
+        transaction.commit().map_err(|error| error.to_string())
     }
 
     pub fn update(&self, goal: Goal) -> Result<(), String> {
-        self.db
+        let transaction = self
+            .db
             .connection()
+            .unchecked_transaction()
+            .map_err(|error| error.to_string())?;
+
+        transaction
             .execute(
                 "
                 UPDATE goals
@@ -90,14 +72,18 @@ impl<'a> GoalRepository<'a> {
                     goal.completed_at
                 ],
             )
-            .map(|_| ())
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string())?;
+
+        replace_schedule_days(&transaction, &goal.id, &goal.schedule_days)?;
+        replace_milestones(&transaction, &goal.id, &goal.milestones)?;
+
+        transaction.commit().map_err(|error| error.to_string())
     }
 
     #[cfg(test)]
     pub fn get(&self, id: &str) -> Result<Option<Goal>, String> {
-        self.db
-            .connection()
+        let connection = self.db.connection();
+        let mut goal = connection
             .query_row(
                 "
                 SELECT id, title, description, goal_type, status, tracking_mode, metric, target_value, current_value,
@@ -110,13 +96,18 @@ impl<'a> GoalRepository<'a> {
                 map_goal,
             )
             .optional()
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string())?;
+
+        if let Some(goal) = goal.as_mut() {
+          hydrate_goal(connection, goal)?;
+        }
+
+        Ok(goal)
     }
 
     pub fn list(&self) -> Result<Vec<Goal>, String> {
-        let mut statement = self
-            .db
-            .connection()
+        let connection = self.db.connection();
+        let mut statement = connection
             .prepare(
                 "
                 SELECT id, title, description, goal_type, status, tracking_mode, metric, target_value, current_value,
@@ -132,8 +123,15 @@ impl<'a> GoalRepository<'a> {
             .query_map([], map_goal)
             .map_err(|error| error.to_string())?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|error| error.to_string())
+        let mut goals = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
+
+        for goal in &mut goals {
+            hydrate_goal(connection, goal)?;
+        }
+
+        Ok(goals)
     }
 
     pub fn log_progress(&self, entry: GoalProgressEntry) -> Result<(), String> {
@@ -224,6 +222,159 @@ impl<'a> GoalRepository<'a> {
     }
 }
 
+fn insert_goal(transaction: &Transaction<'_>, goal: &Goal) -> Result<(), String> {
+    transaction
+        .execute(
+            "
+            INSERT INTO goals (
+                id, title, description, goal_type, status, tracking_mode, metric, target_value, current_value,
+                period_unit, period_start, period_end, starts_at, ends_at, scope_project_id, scope_tag, source_query,
+                created_at, updated_at, archived_at, completed_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
+            ",
+            params![
+                goal.id,
+                goal.title,
+                goal.description,
+                encode_enum(&goal.goal_type)?,
+                encode_enum(&goal.status)?,
+                encode_enum(&goal.tracking_mode)?,
+                goal.metric,
+                goal.target_value,
+                goal.current_value,
+                goal.period_unit,
+                goal.period_start,
+                goal.period_end,
+                goal.starts_at,
+                goal.ends_at,
+                goal.scope_project_id,
+                goal.scope_tag,
+                goal.source_query,
+                goal.created_at,
+                goal.updated_at,
+                goal.archived_at,
+                goal.completed_at
+            ],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn replace_schedule_days(
+    transaction: &Transaction<'_>,
+    goal_id: &str,
+    schedule_days: &[String],
+) -> Result<(), String> {
+    transaction
+        .execute("DELETE FROM goal_schedule_days WHERE goal_id = ?1", params![goal_id])
+        .map_err(|error| error.to_string())?;
+
+    for day in schedule_days {
+        transaction
+            .execute(
+                "INSERT INTO goal_schedule_days (goal_id, weekday) VALUES (?1, ?2)",
+                params![goal_id, day],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
+fn replace_milestones(
+    transaction: &Transaction<'_>,
+    goal_id: &str,
+    milestones: &[GoalMilestone],
+) -> Result<(), String> {
+    transaction
+        .execute("DELETE FROM goal_milestones WHERE goal_id = ?1", params![goal_id])
+        .map_err(|error| error.to_string())?;
+
+    for milestone in milestones {
+        transaction
+            .execute(
+                "
+                INSERT INTO goal_milestones (
+                    id, goal_id, title, sort_order, is_completed, completed_at, created_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                ",
+                params![
+                    milestone.id,
+                    goal_id,
+                    milestone.title,
+                    milestone.sort_order,
+                    milestone.is_completed,
+                    milestone.completed_at,
+                    milestone.created_at,
+                    milestone.updated_at
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
+fn hydrate_goal(connection: &rusqlite::Connection, goal: &mut Goal) -> Result<(), String> {
+    goal.schedule_days = load_schedule_days(connection, &goal.id)?;
+    goal.milestones = load_milestones(connection, &goal.id)?;
+    Ok(())
+}
+
+fn load_schedule_days(connection: &rusqlite::Connection, goal_id: &str) -> Result<Vec<String>, String> {
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT weekday
+            FROM goal_schedule_days
+            WHERE goal_id = ?1
+            ",
+        )
+        .map_err(|error| error.to_string())?;
+
+    let rows = statement
+        .query_map(params![goal_id], |row| row.get::<_, String>(0))
+        .map_err(|error| error.to_string())?;
+
+    let mut schedule_days = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
+
+    schedule_days.sort_by_key(|weekday| weekday_order(weekday));
+
+    Ok(schedule_days)
+}
+
+fn load_milestones(connection: &rusqlite::Connection, goal_id: &str) -> Result<Vec<GoalMilestone>, String> {
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT id, title, sort_order, is_completed, completed_at, created_at, updated_at
+            FROM goal_milestones
+            WHERE goal_id = ?1
+            ORDER BY sort_order ASC, created_at ASC
+            ",
+        )
+        .map_err(|error| error.to_string())?;
+
+    let rows = statement
+        .query_map(params![goal_id], |row| {
+            Ok(GoalMilestone {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                sort_order: row.get(2)?,
+                is_completed: row.get(3)?,
+                completed_at: option_string(row, 4)?,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())
+}
+
 fn map_goal(row: &rusqlite::Row<'_>) -> rusqlite::Result<Goal> {
     Ok(Goal {
         id: row.get(0)?,
@@ -243,9 +394,24 @@ fn map_goal(row: &rusqlite::Row<'_>) -> rusqlite::Result<Goal> {
         scope_project_id: option_string(row, 14)?,
         scope_tag: option_string(row, 15)?,
         source_query: option_string(row, 16)?,
+        schedule_days: Vec::new(),
+        milestones: Vec::new(),
         created_at: row.get(17)?,
         updated_at: row.get(18)?,
         archived_at: option_string(row, 19)?,
         completed_at: option_string(row, 20)?,
     })
+}
+
+fn weekday_order(weekday: &str) -> usize {
+    match weekday {
+        "monday" => 0,
+        "tuesday" => 1,
+        "wednesday" => 2,
+        "thursday" => 3,
+        "friday" => 4,
+        "saturday" => 5,
+        "sunday" => 6,
+        _ => usize::MAX,
+    }
 }

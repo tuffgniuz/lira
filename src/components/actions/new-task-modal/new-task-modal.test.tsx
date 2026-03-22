@@ -64,7 +64,7 @@ describe("NewTaskModal", () => {
         isOpen
         onClose={vi.fn()}
         goals={[
-          { id: "goal-1", title: "Complete 5 review tasks", remainingSlots: 3, projectId: "project-1" },
+          { id: "goal-1", title: "Complete 5 review tasks", projectId: "project-1" },
         ]}
         projects={[{ id: "project-1", name: "Lira" }]}
         onSubmit={onSubmit}
@@ -142,19 +142,19 @@ describe("NewTaskModal", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("disables goals that already reached their task limit", () => {
+  it("keeps project-scoped goals selectable without a remaining-slots limit", () => {
     render(
       <NewTaskModal
         isOpen
         onClose={vi.fn()}
         goals={[
-          { id: "goal-1", title: "Complete 5 review tasks", remainingSlots: 0, projectId: "project-1" },
+          { id: "goal-1", title: "Complete 5 review tasks", projectId: "project-1" },
         ]}
         projects={[{ id: "project-1", name: "Lira" }]}
         onSubmit={vi.fn()}
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Complete 5 review tasks" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Complete 5 review tasks" })).not.toBeDisabled();
   });
 });

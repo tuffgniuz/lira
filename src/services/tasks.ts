@@ -14,6 +14,7 @@ export type PersistedTask = {
   projectId: string | null;
   projectLaneId: string | null;
   sourceCaptureId: string | null;
+  customFieldValues: Record<string, string>;
   createdAt: string;
   updatedAt: string;
 };

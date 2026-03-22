@@ -13,15 +13,19 @@ export type GoalProgressSnapshot = {
   progressPercent: number;
   isDirectCompletion: boolean;
   linkedTasks: Item[];
+  isOffDay: boolean;
 };
 
 export function resolveGoalProgress(
   goal: Item,
   context: GoalProgressContext,
 ): GoalProgressSnapshot {
-  const rawCompletedCount = goal.goalMetric === "tasks_completed"
-    ? getAutomaticPeriodProgress(goal, context)
-    : getDirectCompletionProgress(goal, context.todayDate);
+  const isOffDay = isGoalOffDay(goal, context.todayDate);
+  const rawCompletedCount = goal.goalMilestones?.length
+    ? getMilestoneProgress(goal)
+    : goal.goalMetric === "tasks_completed"
+      ? getAutomaticPeriodProgress(goal, context)
+      : getDirectCompletionProgress(goal, context.todayDate);
   const completedCount = Math.max(
     0,
     Math.min(rawCompletedCount, getProgressDenominator(goal)),
@@ -29,7 +33,7 @@ export function resolveGoalProgress(
   const linkedTasks = goal.goalScope?.taskIds?.length
     ? getScopedTasks(goal, context.items)
     : [];
-  const progressDenominator = getProgressDenominator(goal);
+  const progressDenominator = isOffDay ? 0 : getProgressDenominator(goal);
 
   return {
     completedCount,
@@ -38,8 +42,9 @@ export function resolveGoalProgress(
       progressDenominator > 0
         ? Math.min(100, Math.max(0, (completedCount / progressDenominator) * 100))
         : 0,
-    isDirectCompletion: !goal.goalMetric,
+    isDirectCompletion: !goal.goalMetric && !(goal.goalMilestones?.length),
     linkedTasks,
+    isOffDay,
   };
 }
 
@@ -48,6 +53,14 @@ export function resolveGoalProgressForDate(
   context: GoalProgressContext,
   date: string,
 ) {
+  if (isGoalOffDay(goal, date)) {
+    return 0;
+  }
+
+  if (goal.goalMilestones?.length) {
+    return goal.goalMilestones.filter((milestone) => milestone.isCompleted).length;
+  }
+
   if (!goal.goalMetric) {
     return getDirectCompletionForDate(goal, date, context.todayDate);
   }
@@ -61,10 +74,18 @@ export function resolveGoalProgressForDate(
 }
 
 function getProgressDenominator(goal: Item) {
+  if (goal.goalMilestones?.length) {
+    return goal.goalMilestones.length;
+  }
+
   return goal.goalTarget;
 }
 
 function getAutomaticPeriodProgress(goal: Item, context: GoalProgressContext) {
+  if (isGoalOffDay(goal, context.todayDate)) {
+    return 0;
+  }
+
   switch (goal.goalMetric) {
     case "tasks_completed":
       return getMatchingTasks(goal, context.items).filter((task) =>
@@ -76,6 +97,10 @@ function getAutomaticPeriodProgress(goal: Item, context: GoalProgressContext) {
 }
 
 function getDirectCompletionProgress(goal: Item, todayDate: string) {
+  if (isGoalOffDay(goal, todayDate)) {
+    return 0;
+  }
+
   const progressByDate = goal.goalProgressByDate ?? {};
   const matchingEntries = Object.entries(progressByDate).filter(([date]) =>
     isDateInCurrentPeriod(date, todayDate, goal.goalPeriod),
@@ -90,6 +115,10 @@ function getDirectCompletionProgress(goal: Item, todayDate: string) {
 }
 
 function getDirectCompletionForDate(goal: Item, date: string, todayDate: string) {
+  if (isGoalOffDay(goal, date)) {
+    return 0;
+  }
+
   const progressByDate = goal.goalProgressByDate ?? {};
 
   if (date in progressByDate) {
@@ -161,6 +190,48 @@ function isDateInCurrentPeriod(date: string, todayDate: string, period: Item["go
     default:
       return false;
   }
+}
+
+function getMilestoneProgress(goal: Item) {
+  return goal.goalMilestones?.filter((milestone) => milestone.isCompleted).length ?? 0;
+}
+
+function isDailyGoalWithSchedule(goal: Item) {
+  return goal.goalPeriod === "daily";
+}
+
+function isGoalOffDay(goal: Item, date: string) {
+  if (!isDailyGoalWithSchedule(goal)) {
+    return false;
+  }
+
+  const scheduleDays = goal.goalScheduleDays ?? [];
+
+  if (scheduleDays.length === 0) {
+    return false;
+  }
+
+  const weekday = getWeekdayName(date);
+  return weekday ? !scheduleDays.includes(weekday) : false;
+}
+
+function getWeekdayName(date: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return null;
+  }
+
+  const current = new Date(`${date}T00:00:00`);
+  const weekdays = [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+  ] as const;
+
+  return weekdays[current.getDay()] ?? null;
 }
 
 function getWeekKey(date: string) {

@@ -121,4 +121,62 @@ describe("goal progress", () => {
       todayDate: "2026-03-16",
     }, "2026-03-16")).toBe(1);
   });
+
+  it("treats unscheduled daily goals as off days when today is not selected", () => {
+    const goal = createItem({
+      goalPeriod: "daily",
+      goalMetric: "tasks_completed",
+      goalTarget: 3,
+      goalScope: { projectId: "project-1" },
+      goalScheduleDays: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    });
+    const items = [
+      createItem({
+        id: "task-1",
+        kind: "task",
+        isCompleted: true,
+        completedAt: "2026-03-22",
+        projectId: "project-1",
+      }),
+    ];
+
+    const progress = resolveGoalProgress(goal, {
+      items,
+      journalSummaries: [],
+      todayDate: "2026-03-22",
+    });
+
+    expect(progress.isOffDay).toBe(true);
+    expect(progress.completedCount).toBe(0);
+    expect(progress.progressDenominator).toBe(0);
+    expect(resolveGoalProgressForDate(goal, {
+      items,
+      journalSummaries: [],
+      todayDate: "2026-03-22",
+    }, "2026-03-22")).toBe(0);
+  });
+
+  it("tracks milestone goals using completed milestones instead of task metrics", () => {
+    const goal = createItem({
+      goalMetric: undefined,
+      goalTarget: 3,
+      goalPeriod: "monthly",
+      goalMilestones: [
+        { id: "milestone-1", title: "Draft", isCompleted: true, completedAt: "2026-03-10" },
+        { id: "milestone-2", title: "Review", isCompleted: false, completedAt: "" },
+        { id: "milestone-3", title: "Ship", isCompleted: true, completedAt: "2026-03-18" },
+      ],
+    });
+
+    const progress = resolveGoalProgress(goal, {
+      items: [],
+      journalSummaries: [],
+      todayDate: "2026-03-22",
+    });
+
+    expect(progress.completedCount).toBe(2);
+    expect(progress.progressDenominator).toBe(3);
+    expect(progress.isDirectCompletion).toBe(false);
+    expect(progress.isOffDay).toBe(false);
+  });
 });

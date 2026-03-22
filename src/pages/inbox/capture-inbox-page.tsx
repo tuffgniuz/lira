@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionBar } from "@/components/actions/action-bar";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Modal } from "@/components/actions/modal";
@@ -12,8 +12,36 @@ type PendingInboxAction =
   | { type: "state"; capture: InboxCaptureView; nextState: InboxCaptureState }
   | { type: "delete"; capture: InboxCaptureView };
 
+const captureListMotionOffsets = {
+  j: 1,
+  k: -1,
+  ArrowDown: 1,
+  ArrowUp: -1,
+} as const satisfies Record<string, 1 | -1>;
+
+const inboxFilterDefinitions = [
+  { id: "inbox", label: "Inbox" },
+  { id: "someday", label: "Someday" },
+  { id: "archived", label: "Archived" },
+  { id: "all", label: "All" },
+] as const;
+
+function isTypingTarget(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    (target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.tagName === "SELECT" ||
+      target.isContentEditable ||
+      target.getAttribute("contenteditable") === "true" ||
+      target.closest("[contenteditable]") !== null)
+  );
+}
+
 export function CaptureInboxPage({
   captures,
+  projects,
+  onCreateCapture,
   onConvertCaptureToTask,
   onConvertCaptureToGoal,
   onUpdateCaptureState,
@@ -21,14 +49,22 @@ export function CaptureInboxPage({
   onNotify,
 }: {
   captures: InboxCaptureView[];
-  onConvertCaptureToTask: (captureId: string) => void;
-  onConvertCaptureToGoal: (captureId: string) => void;
+  projects: Array<{ id: string; name: string }>;
+  onCreateCapture: (value: string) => void;
+  onConvertCaptureToTask: (captureId: string, projectId?: string) => void;
+  onConvertCaptureToGoal: (captureId: string, projectId?: string) => void;
   onUpdateCaptureState: (captureId: string, state: InboxCaptureState) => void;
   onDeleteCapture: (captureId: string) => void;
   onNotify: (message: string) => void;
 }) {
   const [activeFilter, setActiveFilter] = useState<"all" | InboxCaptureState>("inbox");
+  const [activeCaptureId, setActiveCaptureId] = useState("");
+  const [deleteChordArmed, setDeleteChordArmed] = useState(false);
+  const [draftOpen, setDraftOpen] = useState(false);
+  const [draftValue, setDraftValue] = useState("");
   const [pendingAction, setPendingAction] = useState<PendingInboxAction | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
+  const tableRef = useRef<HTMLTableElement | null>(null);
   const filteredItems = useMemo(
     () =>
       captures.filter((capture) =>
@@ -36,6 +72,198 @@ export function CaptureInboxPage({
       ),
     [activeFilter, captures],
   );
+  const filterCounts = useMemo(
+    () => ({
+      inbox: captures.filter((capture) => capture.state === "inbox").length,
+      someday: captures.filter((capture) => capture.state === "someday").length,
+      archived: captures.filter((capture) => capture.state === "archived").length,
+      all: captures.length,
+    }),
+    [captures],
+  );
+
+  function setFilterFromShortcut(key: string) {
+    if (key === "1") {
+      setActiveFilter("inbox");
+      return true;
+    }
+
+    if (key === "2") {
+      setActiveFilter("someday");
+      return true;
+    }
+
+    if (key === "3") {
+      setActiveFilter("archived");
+      return true;
+    }
+
+    if (key === "4") {
+      setActiveFilter("all");
+      return true;
+    }
+
+    return false;
+  }
+
+  useEffect(() => {
+    if (!filteredItems.length) {
+      setActiveCaptureId("");
+      return;
+    }
+
+    if (!filteredItems.some((capture) => capture.id === activeCaptureId)) {
+      setActiveCaptureId(filteredItems[0].id);
+    }
+  }, [activeCaptureId, filteredItems]);
+
+  useEffect(() => {
+    if (!activeCaptureId || pendingAction) {
+      return;
+    }
+
+    tableRef.current?.focus({ preventScroll: true });
+
+    const row = rowRefs.current.get(activeCaptureId);
+
+    if (row && typeof row.scrollIntoView === "function") {
+      row.scrollIntoView({ block: "nearest" });
+    }
+  }, [activeCaptureId, pendingAction]);
+
+  useEffect(() => {
+    if (!deleteChordArmed) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDeleteChordArmed(false);
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [deleteChordArmed]);
+
+  function handleSubmitDraftCapture() {
+    const text = draftValue.trim();
+
+    if (!text) {
+      return;
+    }
+
+    onCreateCapture(text);
+    setDraftValue("");
+    setDraftOpen(false);
+    setDeleteChordArmed(false);
+    setActiveFilter("inbox");
+  }
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (pendingAction || isTypingTarget(event.target)) {
+        return;
+      }
+
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      if (setFilterFromShortcut(event.key)) {
+        event.preventDefault();
+        setDeleteChordArmed(false);
+        return;
+      }
+
+      if (draftOpen) {
+        return;
+      }
+
+      const activeCapture = filteredItems.find((capture) => capture.id === activeCaptureId);
+
+      if (event.key === "Escape") {
+        setDeleteChordArmed(false);
+        return;
+      }
+
+      if (event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        setActiveFilter("inbox");
+        setDraftOpen(true);
+        setDraftValue("");
+        setDeleteChordArmed(false);
+        return;
+      }
+
+      if (deleteChordArmed && event.key.toLowerCase() !== "d") {
+        setDeleteChordArmed(false);
+      }
+
+      if (event.key.toLowerCase() === "d") {
+        if (!activeCapture) {
+          return;
+        }
+
+        event.preventDefault();
+
+        if (!deleteChordArmed) {
+          setDeleteChordArmed(true);
+          return;
+        }
+
+        setPendingAction({ type: "delete", capture: activeCapture });
+        setDeleteChordArmed(false);
+        return;
+      }
+
+      if (!activeCapture) {
+        return;
+      }
+
+      if (event.key.toLowerCase() === "t") {
+        event.preventDefault();
+        setPendingAction({ type: "task", capture: activeCapture });
+        return;
+      }
+
+      if (event.key.toLowerCase() === "g") {
+        event.preventDefault();
+        setPendingAction({ type: "goal", capture: activeCapture });
+        return;
+      }
+
+      if (event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        setPendingAction({ type: "state", capture: activeCapture, nextState: "someday" });
+        return;
+      }
+
+      if (event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        setPendingAction({ type: "state", capture: activeCapture, nextState: "archived" });
+        return;
+      }
+
+      const offset = captureListMotionOffsets[event.key as keyof typeof captureListMotionOffsets];
+
+      if (!offset || !filteredItems.length) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const currentIndex = filteredItems.findIndex((capture) => capture.id === activeCaptureId);
+      const startIndex = currentIndex >= 0 ? currentIndex : 0;
+      const nextIndex = Math.max(0, Math.min(filteredItems.length - 1, startIndex + offset));
+      setActiveCaptureId(filteredItems[nextIndex].id);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeCaptureId, deleteChordArmed, draftOpen, filteredItems, pendingAction]);
 
   return (
     <PageShell
@@ -44,40 +272,25 @@ export function CaptureInboxPage({
       className="page--inbox"
       headerActions={
         <div className="inbox-filters" aria-label="Inbox filters">
-          <button
-            type="button"
-            className={`inbox-filter ${activeFilter === "inbox" ? "inbox-filter--active" : ""}`}
-            onClick={() => setActiveFilter("inbox")}
-          >
-            Inbox
-          </button>
-          <button
-            type="button"
-            className={`inbox-filter ${activeFilter === "someday" ? "inbox-filter--active" : ""}`}
-            onClick={() => setActiveFilter("someday")}
-          >
-            Someday
-          </button>
-          <button
-            type="button"
-            className={`inbox-filter ${activeFilter === "archived" ? "inbox-filter--active" : ""}`}
-            onClick={() => setActiveFilter("archived")}
-          >
-            Archived
-          </button>
-          <button
-            type="button"
-            className={`inbox-filter ${activeFilter === "all" ? "inbox-filter--active" : ""}`}
-            onClick={() => setActiveFilter("all")}
-          >
-            All
-          </button>
+          {inboxFilterDefinitions.map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              className={`inbox-filter ${activeFilter === filter.id ? "inbox-filter--active" : ""}`}
+              onClick={() => setActiveFilter(filter.id)}
+            >
+              <span>{filter.label}</span>
+              <span className="inbox-filter__count" aria-hidden="true">
+                {filterCounts[filter.id]}
+              </span>
+            </button>
+          ))}
         </div>
       }
     >
-      {filteredItems.length > 0 ? (
+      {filteredItems.length > 0 || draftOpen ? (
         <div className="inbox-table-wrap" aria-label="Captured thoughts">
-          <table className="inbox-table">
+          <table ref={tableRef} className="inbox-table" tabIndex={0}>
             <thead>
               <tr>
                 <th scope="col">Item</th>
@@ -89,8 +302,56 @@ export function CaptureInboxPage({
               </tr>
             </thead>
             <tbody>
+              {draftOpen ? (
+                <tr className="inbox-table__draft-row">
+                  <td colSpan={6}>
+                    <form
+                      className="inbox-table__draft-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        handleSubmitDraftCapture();
+                      }}
+                    >
+                      <input
+                        className="inbox-table__draft-input"
+                        aria-label="New capture text"
+                        placeholder="Capture a thought"
+                        value={draftValue}
+                        autoFocus
+                        onChange={(event) => setDraftValue(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            handleSubmitDraftCapture();
+                            return;
+                          }
+
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            setDraftValue("");
+                            setDraftOpen(false);
+                          }
+                        }}
+                      />
+                    </form>
+                  </td>
+                </tr>
+              ) : null}
               {filteredItems.map((item) => (
-                <tr key={item.id}>
+                <tr
+                  key={item.id}
+                  ref={(element) => {
+                    if (element) {
+                      rowRefs.current.set(item.id, element);
+                    } else {
+                      rowRefs.current.delete(item.id);
+                    }
+                  }}
+                  className={activeCaptureId === item.id ? "is-active" : ""}
+                  aria-selected={activeCaptureId === item.id}
+                  aria-label={item.text}
+                  onMouseDown={() => setActiveCaptureId(item.id)}
+                >
                   <td className="inbox-table__item-cell">
                     <div className="inbox-table__item-content">
                       <span className="inbox-item__marker" aria-hidden="true" />
@@ -106,39 +367,54 @@ export function CaptureInboxPage({
                       <button
                         type="button"
                         className="inbox-action"
-                        onClick={() => setPendingAction({ type: "task", capture: item })}
+                        onClick={() => {
+                          setActiveCaptureId(item.id);
+                          setPendingAction({ type: "task", capture: item });
+                        }}
                       >
                         Task
                       </button>
                       <button
                         type="button"
                         className="inbox-action"
-                        onClick={() => setPendingAction({ type: "goal", capture: item })}
+                        onClick={() => {
+                          setActiveCaptureId(item.id);
+                          setPendingAction({ type: "goal", capture: item });
+                        }}
                       >
                         Goal
                       </button>
                       <button
                         type="button"
                         className="inbox-action"
-                        onClick={() =>
-                          setPendingAction({ type: "state", capture: item, nextState: "someday" })
-                        }
+                        onClick={() => {
+                          setActiveCaptureId(item.id);
+                          setPendingAction({ type: "state", capture: item, nextState: "someday" });
+                        }}
                       >
                         Someday
                       </button>
                       <button
                         type="button"
                         className="inbox-action"
-                        onClick={() =>
-                          setPendingAction({ type: "state", capture: item, nextState: "archived" })
-                        }
+                        onClick={() => {
+                          setActiveCaptureId(item.id);
+                          setPendingAction({
+                            type: "state",
+                            capture: item,
+                            nextState: "archived",
+                          });
+                        }}
                       >
                         Archive
                       </button>
                       <button
                         type="button"
                         className="inbox-action"
-                        onClick={() => setPendingAction({ type: "delete", capture: item })}
+                        onClick={() => {
+                          setActiveCaptureId(item.id);
+                          setPendingAction({ type: "delete", capture: item });
+                        }}
                       >
                         Delete
                       </button>
@@ -160,16 +436,17 @@ export function CaptureInboxPage({
 
       {pendingAction ? (
         <InboxActionConfirmModal
+          projects={projects}
           pendingAction={pendingAction}
           onClose={() => setPendingAction(null)}
-          onConfirm={() => {
+          onConfirm={(projectId) => {
             if (pendingAction.type === "task") {
-              onConvertCaptureToTask(pendingAction.capture.id);
+              onConvertCaptureToTask(pendingAction.capture.id, projectId);
               onNotify("Converted to task successfully.");
             }
 
             if (pendingAction.type === "goal") {
-              onConvertCaptureToGoal(pendingAction.capture.id);
+              onConvertCaptureToGoal(pendingAction.capture.id, projectId);
               onNotify("Converted to goal successfully.");
             }
 
@@ -236,14 +513,17 @@ function emptyCopyForFilter(filter: "all" | InboxCaptureState) {
 }
 
 function InboxActionConfirmModal({
+  projects,
   pendingAction,
   onClose,
   onConfirm,
 }: {
+  projects: Array<{ id: string; name: string }>;
   pendingAction: PendingInboxAction;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (projectId?: string) => void;
 }) {
+  const [selectedProjectId, setSelectedProjectId] = useState("");
   const title =
     pendingAction.type === "task"
       ? "Turn into Task"
@@ -262,6 +542,16 @@ function InboxActionConfirmModal({
               pendingAction.nextState,
             ).toLowerCase()} state.`
           : "This will permanently remove the item.";
+  const needsProjectSelection = pendingAction.type === "task" || pendingAction.type === "goal";
+
+  useEffect(() => {
+    if (needsProjectSelection) {
+      setSelectedProjectId(pendingAction.capture.projectId ?? "");
+      return;
+    }
+
+    setSelectedProjectId("");
+  }, [needsProjectSelection, pendingAction]);
 
   return (
     <Modal ariaLabelledBy="inbox-confirm-title" className="inbox-confirm" onClose={onClose}>
@@ -271,6 +561,36 @@ function InboxActionConfirmModal({
         </p>
         <p className="inbox-confirm__item">{pendingAction.capture.text}</p>
         <p className="inbox-confirm__copy">{description}</p>
+        {needsProjectSelection ? (
+          <div className="ui-form-field">
+            <span className="ui-form-field__header">
+              <span className="ui-form-field__hint">Select project</span>
+            </span>
+            <div className="new-task__project-row" role="group" aria-label="Capture project options">
+              <button
+                type="button"
+                className={`new-task__project-choice ${selectedProjectId === "" ? "is-active" : ""}`}
+                onClick={() => setSelectedProjectId("")}
+                aria-pressed={selectedProjectId === ""}
+              >
+                No project
+              </button>
+              {projects.map((project) => (
+                <button
+                  key={project.id}
+                  type="button"
+                  className={`new-task__project-choice ${
+                    selectedProjectId === project.id ? "is-active" : ""
+                  }`}
+                  onClick={() => setSelectedProjectId(project.id)}
+                  aria-pressed={selectedProjectId === project.id}
+                >
+                  {project.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <ActionBar className="inbox-confirm__actions">
           <button type="button" className="inbox-confirm__button" onClick={onClose}>
             Cancel
@@ -278,7 +598,7 @@ function InboxActionConfirmModal({
           <button
             type="button"
             className="inbox-confirm__button inbox-confirm__button--confirm"
-            onClick={onConfirm}
+            onClick={() => onConfirm(selectedProjectId || undefined)}
           >
             Confirm
           </button>

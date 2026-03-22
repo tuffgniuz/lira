@@ -46,10 +46,54 @@ describe("buildRightRailContext", () => {
       {
         id: "goal-1",
         title: "Close two tasks",
-        projectLabel: "",
+        metaLabel: "Tasks",
         completedCount: 1,
         progressDenominator: 2,
         progressPercent: 50,
+        weekDays: [
+          {
+            date: "2026-03-16",
+            label: "Monday",
+            shortLabel: "Mon",
+            status: { kind: "missed", label: "missed", symbol: "×" },
+          },
+          {
+            date: "2026-03-17",
+            label: "Tuesday",
+            shortLabel: "Tue",
+            status: { kind: "pending", label: "pending", symbol: "—" },
+          },
+          {
+            date: "2026-03-18",
+            label: "Wednesday",
+            shortLabel: "Wed",
+            status: { kind: "pending", label: "pending", symbol: "—" },
+          },
+          {
+            date: "2026-03-19",
+            label: "Thursday",
+            shortLabel: "Thu",
+            status: { kind: "pending", label: "pending", symbol: "—" },
+          },
+          {
+            date: "2026-03-20",
+            label: "Friday",
+            shortLabel: "Fri",
+            status: { kind: "pending", label: "pending", symbol: "—" },
+          },
+          {
+            date: "2026-03-21",
+            label: "Saturday",
+            shortLabel: "Sat",
+            status: { kind: "pending", label: "pending", symbol: "—" },
+          },
+          {
+            date: "2026-03-22",
+            label: "Sunday",
+            shortLabel: "Sun",
+            status: { kind: "pending", label: "pending", symbol: "—" },
+          },
+        ],
       },
     ]);
   });

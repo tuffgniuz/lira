@@ -28,13 +28,32 @@ export function RightRailColumn({
                     <p className="right-rail__goal-title" title={goal.title}>
                       {goal.title}
                     </p>
-                    {goal.projectLabel ? (
-                      <p className="right-rail__goal-meta">{goal.projectLabel}</p>
-                    ) : null}
+                    <p className="right-rail__goal-meta">{goal.metaLabel}</p>
                   </div>
                   <span className="right-rail__goal-progress">
                     {goal.completedCount}/{goal.progressDenominator}
                   </span>
+                </div>
+                <div
+                  className="goal-card__week-strip right-rail__goal-week-strip"
+                  aria-label={`${goal.title} week status`}
+                >
+                  <div className="goal-card__week-grid right-rail__goal-week-grid">
+                    {goal.weekDays.map((day) => (
+                      <span key={`${day.date}-label`} className="goal-card__week-label">
+                        {day.shortLabel}
+                      </span>
+                    ))}
+                    {goal.weekDays.map((day) => (
+                      <span
+                        key={`${day.date}-status`}
+                        className={`goal-card__week-status right-rail__goal-week-status is-${day.status.kind}`}
+                        aria-label={`${day.label} status: ${day.status.label}`}
+                      >
+                        {day.status.symbol}
+                      </span>
+                    ))}
+                  </div>
                 </div>
                 <div className="right-rail__goal-bar" aria-hidden="true">
                   <div

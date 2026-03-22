@@ -158,6 +158,7 @@ describe("LiraShell list shortcuts", () => {
         id: "project-1",
         name: "Lira",
         description: "Main app",
+        hasKanbanBoard: true,
         boardLanes: defaultProjectBoardLanes("project-1"),
         createdAt: "2026-03-17T00:00:00.000Z",
         updatedAt: "2026-03-17T00:00:00.000Z",
@@ -256,6 +257,93 @@ describe("LiraShell list shortcuts", () => {
     expect(screen.queryByRole("textbox", { name: "New task title" })).not.toBeInTheDocument();
   });
 
+  it("dispatches project board move events for leader shift h and leader shift l", async () => {
+    const moveHandler = vi.fn();
+    window.addEventListener("lira:move-project-board-task", moveHandler as EventListener);
+
+    try {
+      renderShell();
+
+      await waitFor(() => {
+        expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+        expect(mocks.loadProjects).toHaveBeenCalled();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+      expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
+
+      fireEvent.keyDown(window, { key: " " });
+      fireEvent.keyDown(window, { key: "H", shiftKey: true });
+
+      expect(moveHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: { direction: "left" },
+        }),
+      );
+
+      fireEvent.keyDown(window, { key: " " });
+      fireEvent.keyDown(window, { key: "L", shiftKey: true });
+
+      expect(moveHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: { direction: "right" },
+        }),
+      );
+    } finally {
+      window.removeEventListener("lira:move-project-board-task", moveHandler as EventListener);
+    }
+  });
+
+  it("lets focused project list rows use x to complete tasks", async () => {
+    mocks.loadProjects.mockResolvedValue([
+      {
+        id: "project-1",
+        name: "Lira",
+        description: "Main app",
+        hasKanbanBoard: false,
+        boardLanes: [],
+        createdAt: "2026-03-17T00:00:00.000Z",
+        updatedAt: "2026-03-17T00:00:00.000Z",
+      },
+    ]);
+    mocks.loadWorkspaceItems.mockResolvedValue([
+      createWorkspaceItem({
+        id: "task-1",
+        kind: "task",
+        title: "Add list task shortcut",
+        projectId: "project-1",
+      }),
+    ]);
+
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+      expect(mocks.loadProjects).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
+
+    await screen.findByRole("row", { name: /Add list task shortcut/i });
+    const taskTable = screen.getByRole("table", { name: "Project tasks" });
+    await waitFor(() => {
+      expect(taskTable).toHaveFocus();
+    });
+
+    fireEvent.keyDown(taskTable, { key: "x" });
+
+    await waitFor(() => {
+      expect(mocks.updateTask).toHaveBeenCalledWith(
+        "/tmp/lira-test-vault",
+        expect.objectContaining({
+          id: "task-1",
+          isCompleted: true,
+        }),
+      );
+    });
+  });
+
   it("keeps an empty vault empty instead of showing seeded example items", async () => {
     mocks.loadWorkspaceItems.mockResolvedValue([]);
     mocks.loadProjects.mockResolvedValue([]);
@@ -272,7 +360,7 @@ describe("LiraShell list shortcuts", () => {
     expect(screen.queryByText("Design the first task workspace layout")).not.toBeInTheDocument();
   });
 
-  it("links a new task to a goal and prevents linking once the goal is full", async () => {
+  it("keeps project-scoped task goals automatic when creating tasks", async () => {
     mocks.loadWorkspaceItems.mockResolvedValue([
       createWorkspaceItem({
         id: "goal-1",
@@ -280,7 +368,7 @@ describe("LiraShell list shortcuts", () => {
         title: "Complete 2 review tasks",
         goalTarget: 2,
         goalMetric: "tasks_completed",
-        goalScope: { projectId: "project-1", taskIds: ["task-1"] },
+        goalScope: { projectId: "project-1" },
       }),
       createWorkspaceItem({
         id: "task-1",
@@ -317,7 +405,7 @@ describe("LiraShell list shortcuts", () => {
           expect.objectContaining({
             kind: "goal",
             id: "goal-1",
-            goalScope: { projectId: "project-1", taskIds: expect.arrayContaining(["task-1"]) },
+            goalScope: { projectId: "project-1" },
           }),
         ]),
       );
@@ -335,27 +423,52 @@ describe("LiraShell list shortcuts", () => {
       (item) => item.kind === "task" && item.title === "Review task 2",
     );
 
-    expect(savedGoal?.goalScope?.taskIds).toEqual(["task-1", savedTask?.id]);
+    expect(savedGoal?.goalScope).toEqual({ projectId: "project-1" });
+    expect(savedTask).toEqual(
+      expect.objectContaining({
+        projectId: "project-1",
+      }),
+    );
 
     pressSequence([" ", "n", "t"]);
     fireEvent.change(await screen.findByRole("textbox", { name: "Task title" }), {
       target: { value: "Review task 3" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Lira" }));
-    expect(screen.getByRole("button", { name: "Complete 2 review tasks" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Complete 2 review tasks" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
-  it("opens quick-add task creation from a goal card with that goal preselected", async () => {
-    mocks.loadWorkspaceItems.mockResolvedValue([
-      createWorkspaceItem({
-        id: "goal-1",
-        kind: "goal",
-        title: "Complete 3 tasks each day",
-        goalTarget: 3,
-        goalMetric: "tasks_completed",
-        goalPeriod: "daily",
-        goalScope: { projectId: "project-1" },
-      }),
+  it("applies project task template keys to new project tasks", async () => {
+    mocks.loadProjects.mockResolvedValue([
+      {
+        id: "project-1",
+        name: "Lira",
+        description: "Main app",
+        hasKanbanBoard: false,
+        taskTemplate: {
+          updatedAt: "2026-03-17T00:00:00.000Z",
+          fields: [
+            {
+              id: "field-task-id",
+              key: "task_id",
+              label: "Task ID",
+              type: "text",
+            },
+            {
+              id: "field-stage-uuid",
+              key: "stage_uuid",
+              label: "Stage UUID",
+              type: "text",
+            },
+          ],
+        },
+        boardLanes: [],
+        createdAt: "2026-03-17T00:00:00.000Z",
+        updatedAt: "2026-03-17T00:00:00.000Z",
+      },
     ]);
 
     renderShell();
@@ -364,15 +477,35 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add task to Complete 3 tasks each day" }));
+    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
 
-    expect(await screen.findByRole("dialog", { name: "New task" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Complete 3 tasks each day" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    fireEvent.keyDown(window, { key: "n" });
+    fireEvent.change(await screen.findByRole("textbox", { name: "New task title" }), {
+      target: { value: "Template-backed task" },
+    });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "New task title" }), { key: "Enter" });
+
+    await waitFor(() => {
+      expect(mocks.replaceWorkspaceItems).toHaveBeenCalled();
+    });
+
+    const latestSavedItems = mocks.replaceWorkspaceItems.mock.calls[
+      mocks.replaceWorkspaceItems.mock.calls.length - 1
+    ]?.[1] as WorkspaceItem[];
+    const savedTask = latestSavedItems.find(
+      (item) => item.kind === "task" && item.title === "Template-backed task",
     );
-    expect(screen.getByRole("button", { name: "Lira" })).toHaveAttribute("aria-pressed", "true");
+
+    expect(savedTask).toEqual(
+      expect.objectContaining({
+        projectId: "project-1",
+        customFieldValues: {
+          task_id: "",
+          stage_uuid: "",
+        },
+      }),
+    );
   });
 
   it("creates a project-board task in the focused lane and links it to the project", async () => {
@@ -424,7 +557,7 @@ describe("LiraShell list shortcuts", () => {
     });
   });
 
-  it("saves a task from the goal quick-add modal with Enter from the description field", async () => {
+  it("keeps project-scoped goals automatic when saving a task from the new task modal", async () => {
     mocks.loadWorkspaceItems.mockResolvedValue([
       createWorkspaceItem({
         id: "goal-1",
@@ -449,8 +582,9 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add task to Complete 3 tasks each day" }));
+    pressSequence([" ", "n", "t"]);
+    fireEvent.click(await screen.findByRole("button", { name: "Lira" }));
+    fireEvent.click(screen.getByRole("button", { name: "Complete 3 tasks each day" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Task title" }), {
       target: { value: "Review task #1" },
     });
@@ -480,11 +614,13 @@ describe("LiraShell list shortcuts", () => {
         content: "sndjkas",
       }),
     );
-    expect(savedGoal?.goalScope?.taskIds).toContain(savedTask?.id);
+    expect(savedGoal?.goalScope).toEqual({ projectId: "project-1" });
     expect(
       latestSavedItems.findIndex((item) => item.id === "task-0"),
     ).toBeLessThan(latestSavedItems.findIndex((item) => item.id === savedTask?.id));
-    expect(screen.getByRole("heading", { name: "Daily goals" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "New task" })).not.toBeInTheDocument();
+    });
   });
 
   it("opens a goal in edit mode and updates the existing goal", async () => {
@@ -660,6 +796,54 @@ describe("LiraShell list shortcuts", () => {
     );
   });
 
+  it("lets capture conversion assign the new task to a different project", async () => {
+    mocks.loadWorkspaceItems.mockResolvedValue([
+      createWorkspaceItem({
+        id: "capture-1",
+        kind: "capture",
+        sourceType: "capture",
+        state: "inbox",
+        title: "Build a browser",
+        content: "Build a browser",
+        projectId: "",
+      }),
+    ]);
+
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Capture Inbox" }));
+    fireEvent.click(
+      within(await screen.findByLabelText("Inbox item actions")).getByRole("button", {
+        name: "Task",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Lira" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => {
+      expect(mocks.replaceWorkspaceItems).toHaveBeenCalled();
+    });
+
+    const latestSavedItems = mocks.replaceWorkspaceItems.mock.calls[
+      mocks.replaceWorkspaceItems.mock.calls.length - 1
+    ]?.[1] as WorkspaceItem[];
+    const savedTask = latestSavedItems.find(
+      (item) => item.kind === "task" && item.sourceCaptureId === "capture-1",
+    );
+
+    expect(savedTask).toEqual(
+      expect.objectContaining({
+        title: "Build a browser",
+        projectId: "project-1",
+        project: "Lira",
+      }),
+    );
+  });
+
   it("opens a task as a dedicated detail page instead of showing the list beside it", async () => {
     renderShell();
 
@@ -671,7 +855,6 @@ describe("LiraShell list shortcuts", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Add list task shortcut" }));
 
     expect(await screen.findByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back to tasks" })).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Task" })).not.toBeInTheDocument();
   });
 
@@ -901,13 +1084,7 @@ describe("LiraShell list shortcuts", () => {
     fireEvent.keyDown(window, { key: "Enter" });
 
     expect(await screen.findByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Back to project board" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Projects" })).toHaveClass("is-active");
-
-    fireEvent.click(screen.getByRole("button", { name: "Back to project board" }));
-
-    expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Back to project board" })).not.toBeInTheDocument();
   });
 
   it("ignores Shift+H and Shift+L when focus is inside an editor-like typing target", async () => {

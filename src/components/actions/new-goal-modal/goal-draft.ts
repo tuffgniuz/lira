@@ -89,7 +89,13 @@ function extractTarget(sentence: string) {
 }
 
 function inferPeriod(sentence: string): GoalPeriod {
-  if (sentence.includes("daily") || sentence.includes("every day")) {
+  if (
+    sentence.includes("daily") ||
+    sentence.includes("every day") ||
+    sentence.includes("each day") ||
+    sentence.includes("weekday") ||
+    sentence.includes("weekdays")
+  ) {
     return "daily";
   }
 

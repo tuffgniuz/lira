@@ -14,12 +14,22 @@ export function formatRelativeTimestamp(value: string) {
     ["day", 60 * 60 * 24],
     ["hour", 60 * 60],
     ["minute", 60],
-    ["second", 1],
   ];
+
+  if (diffInSeconds === 0) {
+    return "now";
+  }
+
+  if (Math.abs(diffInSeconds) < 60) {
+    return "just now";
+  }
 
   for (const [unit, secondsPerUnit] of units) {
     if (Math.abs(diffInSeconds) >= secondsPerUnit || unit === "second") {
-      const delta = Math.round(diffInSeconds / secondsPerUnit);
+      const delta =
+        diffInSeconds > 0
+          ? Math.floor(diffInSeconds / secondsPerUnit)
+          : Math.ceil(diffInSeconds / secondsPerUnit);
       return rtf.format(delta, unit);
     }
   }

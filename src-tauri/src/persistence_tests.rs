@@ -6,7 +6,8 @@ use crate::persistence::{
     models::{
         Capture, CaptureLifecycleStatus, CaptureTriageStatus, EntityTag, Goal, GoalProgressEntry,
         GoalStatus, GoalTrackingMode, GoalType, JournalCommitment, JournalCommitmentStatus,
-        JournalEntry, Project, ProjectBoardLane, ProjectStatus, Relationship, Tag, Task,
+        JournalEntry, Project, ProjectBoardLane, ProjectStatus, ProjectTaskTemplate,
+        ProjectTaskTemplateField, ProjectTaskTemplateFieldType, Relationship, Tag, Task,
         TaskLifecycleStatus, TaskQuery, TaskScheduleBucket, UserProfile,
     },
     project_repository::ProjectRepository,
@@ -28,6 +29,8 @@ fn sample_project() -> Project {
         name: "Lira".into(),
         description: Some("Primary workspace".into()),
         status: ProjectStatus::Active,
+        has_kanban_board: true,
+        task_template: None,
         board_lanes: vec![
             ProjectBoardLane {
                 id: "project-1-lane-to-do".into(),
@@ -78,6 +81,7 @@ fn sample_task() -> Task {
         project_id: Some("project-1".into()),
         project_lane_id: Some("project-1-lane-to-do".into()),
         source_capture_id: Some("capture-1".into()),
+        custom_field_values: std::collections::HashMap::new(),
         created_at: "2026-03-17T08:00:00Z".into(),
         updated_at: "2026-03-17T08:00:00Z".into(),
     }
@@ -102,6 +106,8 @@ fn sample_goal() -> Goal {
         scope_project_id: Some("project-1".into()),
         scope_tag: None,
         source_query: None,
+        schedule_days: Vec::new(),
+        milestones: Vec::new(),
         created_at: "2026-03-17T08:00:00Z".into(),
         updated_at: "2026-03-17T08:00:00Z".into(),
         archived_at: None,
@@ -256,6 +262,76 @@ fn creates_reads_updates_and_filters_tasks() {
 }
 
 #[test]
+fn persists_project_task_templates_and_task_custom_field_values() {
+    let db = test_db();
+
+    ProjectRepository::new(&db)
+        .create(Project {
+            task_template: Some(ProjectTaskTemplate {
+                updated_at: "2026-03-17T08:15:00Z".into(),
+                fields: vec![
+                    ProjectTaskTemplateField {
+                        id: "field-task-id".into(),
+                        key: "task_id".into(),
+                        label: "Task ID".into(),
+                        field_type: ProjectTaskTemplateFieldType::Text,
+                    },
+                    ProjectTaskTemplateField {
+                        id: "field-stage-uuid".into(),
+                        key: "stage_uuid".into(),
+                        label: "Stage UUID".into(),
+                        field_type: ProjectTaskTemplateFieldType::Boolean,
+                    },
+                ],
+            }),
+            ..sample_project()
+        })
+        .expect("project should be created");
+    CaptureRepository::new(&db)
+        .create(sample_capture())
+        .expect("capture should be created");
+
+    let mut task = sample_task();
+    task.custom_field_values = std::collections::HashMap::from([
+        ("task_id".into(), "TASK-9".into()),
+        ("stage_uuid".into(), "stage-uuid-9".into()),
+    ]);
+
+    TaskRepository::new(&db)
+        .create(task)
+        .expect("task should be created");
+
+    let projects = ProjectRepository::new(&db)
+        .list()
+        .expect("projects should load");
+    let tasks = TaskRepository::new(&db)
+        .list(TaskQuery::default())
+        .expect("tasks should load");
+
+    assert_eq!(
+        projects[0].task_template.as_ref().expect("template should exist").fields.len(),
+        2
+    );
+    assert_eq!(
+        projects[0]
+            .task_template
+            .as_ref()
+            .expect("template should exist")
+            .fields[1]
+            .field_type,
+        ProjectTaskTemplateFieldType::Boolean
+    );
+    assert_eq!(
+        tasks[0].custom_field_values.get("task_id").map(String::as_str),
+        Some("TASK-9")
+    );
+    assert_eq!(
+        tasks[0].custom_field_values.get("stage_uuid").map(String::as_str),
+        Some("stage-uuid-9")
+    );
+}
+
+#[test]
 fn creates_reads_and_updates_project_board_lanes() {
     let db = test_db();
     let repository = ProjectRepository::new(&db);
@@ -266,6 +342,7 @@ fn creates_reads_and_updates_project_board_lanes() {
 
     let created = repository.list().expect("projects should list");
     assert_eq!(created.len(), 1);
+    assert!(created[0].has_kanban_board);
     assert_eq!(created[0].board_lanes.len(), 3);
     assert_eq!(created[0].board_lanes[0].name, "To Do");
 
@@ -300,6 +377,26 @@ fn creates_reads_and_updates_project_board_lanes() {
     let updated = repository.list().expect("projects should list after update");
     assert_eq!(updated[0].board_lanes.len(), 4);
     assert_eq!(updated[0].board_lanes[2].name, "Review");
+}
+
+#[test]
+fn persists_projects_without_an_enabled_kanban_board() {
+    let db = test_db();
+    let repository = ProjectRepository::new(&db);
+
+    repository
+        .create(Project {
+            has_kanban_board: false,
+            board_lanes: Vec::new(),
+            ..sample_project()
+        })
+        .expect("project should be created");
+
+    let projects = repository.list().expect("projects should list");
+
+    assert_eq!(projects.len(), 1);
+    assert!(!projects[0].has_kanban_board);
+    assert!(projects[0].board_lanes.is_empty());
 }
 
 #[test]
@@ -339,6 +436,52 @@ fn creates_goals_and_tracks_progress_entries() {
         .expect("progress entries should load");
     assert_eq!(progress_entries.len(), 1);
     assert_eq!(progress_entries[0].source_entity_id.as_deref(), Some("task-1"));
+}
+
+#[test]
+fn persists_goal_schedule_days_and_milestones() {
+    let db = test_db();
+    ProjectRepository::new(&db)
+        .create(sample_project())
+        .expect("project should be created");
+
+    let repository = GoalRepository::new(&db);
+    repository
+        .create(Goal {
+            schedule_days: vec!["monday".into(), "wednesday".into(), "friday".into()],
+            milestones: vec![
+                crate::persistence::models::GoalMilestone {
+                    id: "milestone-1".into(),
+                    title: "Draft review".into(),
+                    sort_order: 0,
+                    is_completed: false,
+                    completed_at: None,
+                    created_at: "2026-03-17T08:00:00Z".into(),
+                    updated_at: "2026-03-17T08:00:00Z".into(),
+                },
+                crate::persistence::models::GoalMilestone {
+                    id: "milestone-2".into(),
+                    title: "Publish review".into(),
+                    sort_order: 1,
+                    is_completed: true,
+                    completed_at: Some("2026-03-18T10:00:00Z".into()),
+                    created_at: "2026-03-17T08:00:00Z".into(),
+                    updated_at: "2026-03-18T10:00:00Z".into(),
+                },
+            ],
+            ..sample_goal()
+        })
+        .expect("goal should be created");
+
+    let goal = repository
+        .get("goal-1")
+        .expect("goal lookup should succeed")
+        .expect("goal should exist");
+
+    assert_eq!(goal.schedule_days, vec!["monday", "wednesday", "friday"]);
+    assert_eq!(goal.milestones.len(), 2);
+    assert_eq!(goal.milestones[1].title, "Publish review");
+    assert!(goal.milestones[1].is_completed);
 }
 
 #[test]
@@ -638,6 +781,7 @@ fn loads_default_project_board_lanes_for_legacy_projects_without_saved_lanes() {
         .expect("projects should list after migration");
 
     assert_eq!(projects.len(), 1);
+    assert!(projects[0].has_kanban_board);
     assert_eq!(projects[0].board_lanes.len(), 3);
     assert_eq!(projects[0].board_lanes[0].name, "To Do");
     assert_eq!(projects[0].board_lanes[1].name, "In Progress");

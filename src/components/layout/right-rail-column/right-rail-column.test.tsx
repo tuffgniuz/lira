@@ -72,6 +72,33 @@ describe("RightRailColumn", () => {
       />,
     );
 
-    expect(screen.getByText("Lira")).toBeInTheDocument();
+    expect(screen.getByText("Lira • Tasks")).toBeInTheDocument();
+  });
+
+  it("shows the daily week strip in the right rail for daily goals", () => {
+    render(
+      <RightRailColumn
+        items={[
+          createItem({
+            id: "goal-1",
+            kind: "goal",
+            title: "Finish three tasks",
+            project: "Lira",
+            goalPeriod: "daily",
+            goalMetric: "tasks_completed",
+            goalTarget: 3,
+            goalScheduleDays: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+            goalScope: { projectId: "project-1" },
+          }),
+        ]}
+        journalSummaries={[]}
+        todayDate="2026-03-18"
+      />,
+    );
+
+    expect(screen.getByLabelText("Finish three tasks week status")).toBeInTheDocument();
+    expect(screen.getByLabelText("Monday status: missed")).toBeInTheDocument();
+    expect(screen.getByLabelText("Wednesday status: pending")).toBeInTheDocument();
+    expect(screen.getByLabelText("Saturday status: off day")).toBeInTheDocument();
   });
 });

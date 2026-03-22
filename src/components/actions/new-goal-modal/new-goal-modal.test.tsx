@@ -86,6 +86,8 @@ describe("NewGoalModal", () => {
       period: "weekly",
       metric: "tasks_completed",
       projectId: "project-1",
+      scheduleDays: [],
+      milestones: [],
     });
   });
 
@@ -115,6 +117,8 @@ describe("NewGoalModal", () => {
       period: "weekly",
       metric: undefined,
       projectId: "",
+      scheduleDays: [],
+      milestones: [],
     });
   });
 
@@ -197,6 +201,89 @@ describe("NewGoalModal", () => {
       period: "weekly",
       metric: "tasks_completed",
       projectId: "project-1",
+      scheduleDays: [],
+      milestones: [],
+    });
+  });
+
+  it("shows weekday selectors for daily goals and submits the selected schedule", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <NewGoalModal
+        isOpen
+        onClose={vi.fn()}
+        projects={[{ id: "project-1", name: "Lira" }]}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Goal sentence"), {
+      target: { value: "Complete 3 tasks each weekday" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    fireEvent.change(screen.getByLabelText("Goal target"), {
+      target: { value: "3" },
+    });
+
+    expect(screen.getByRole("checkbox", { name: "Monday" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Sunday" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Saturday" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Sunday" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      title: "Complete 3 tasks each weekday",
+      description: "",
+      target: 3,
+      period: "daily",
+      metric: "tasks_completed",
+      projectId: "",
+      scheduleDays: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+      milestones: [],
+    });
+  });
+
+  it("supports milestone tracking for weekly and monthly goals", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <NewGoalModal
+        isOpen
+        onClose={vi.fn()}
+        projects={[]}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Goal sentence"), {
+      target: { value: "Ship the weekly review" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Weekly" }));
+    fireEvent.click(screen.getByRole("button", { name: "Milestones" }));
+
+    fireEvent.change(screen.getByLabelText("Milestone 1"), {
+      target: { value: "Draft review" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add milestone" }));
+    fireEvent.change(screen.getByLabelText("Milestone 2"), {
+      target: { value: "Publish review" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      title: "Ship the weekly review",
+      description: "",
+      target: 2,
+      period: "weekly",
+      metric: undefined,
+      projectId: "",
+      scheduleDays: [],
+      milestones: [
+        expect.objectContaining({ title: "Draft review", isCompleted: false }),
+        expect.objectContaining({ title: "Publish review", isCompleted: false }),
+      ],
     });
   });
 });

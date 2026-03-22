@@ -10,6 +10,22 @@ export type GoalPeriod = "daily" | "weekly" | "monthly" | "yearly";
 
 export type GoalMetric = "tasks_completed";
 
+export type GoalScheduleDay =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
+export type GoalMilestone = {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+  completedAt?: string;
+};
+
 export type GoalScope = {
   projectId?: string;
   tag?: string;
@@ -44,6 +60,9 @@ export type WorkspaceItem = {
   goalProgressByDate?: GoalProgressByDate;
   goalPeriod: GoalPeriod;
   goalScope?: GoalScope;
+  goalScheduleDays?: GoalScheduleDay[];
+  goalMilestones?: GoalMilestone[];
+  customFieldValues?: Record<string, string>;
 };
 
 export type ItemKind = WorkspaceItemKind;

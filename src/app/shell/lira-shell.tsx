@@ -90,6 +90,22 @@ function getCurrentTimestamp() {
   return new Date().toISOString();
 }
 
+function dispatchProjectBoardMove(direction: "left" | "right") {
+  window.dispatchEvent(
+    new CustomEvent("lira:move-project-board-task", {
+      detail: { direction },
+    }),
+  );
+}
+
+function dispatchProjectBoardLift(active: boolean) {
+  window.dispatchEvent(
+    new CustomEvent("lira:project-board-lift", {
+      detail: { active },
+    }),
+  );
+}
+
 function taskPayloadFromWorkspaceItem(item: Item): PersistedTask {
   return {
     id: item.id,
@@ -115,9 +131,21 @@ function taskPayloadFromWorkspaceItem(item: Item): PersistedTask {
     projectId: item.projectId ?? null,
     projectLaneId: item.projectLaneId ?? null,
     sourceCaptureId: item.sourceCaptureId ?? null,
+    customFieldValues: item.customFieldValues ?? {},
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
   };
+}
+
+function getInitialTaskCustomFieldValues(projects: Project[], projectId?: string) {
+  if (!projectId) {
+    return {};
+  }
+
+  const taskTemplateFields =
+    projects.find((project) => project.id === projectId)?.taskTemplate?.fields ?? [];
+
+  return Object.fromEntries(taskTemplateFields.map((field) => [field.key, ""]));
 }
 
 function getDefaultProjectLaneId(projects: Project[], projectId?: string) {
@@ -126,6 +154,11 @@ function getDefaultProjectLaneId(projects: Project[], projectId?: string) {
   }
 
   const project = projects.find((candidate) => candidate.id === projectId);
+
+  if (project && !project.hasKanbanBoard) {
+    return undefined;
+  }
+
   const laneFromProject = project?.boardLanes[0]?.id;
 
   if (laneFromProject) {
@@ -289,7 +322,6 @@ export function LiraShell() {
   const [newGoalOpen, setNewGoalOpen] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState("");
   const [newTaskOpen, setNewTaskOpen] = useState(false);
-  const [newTaskGoalId, setNewTaskGoalId] = useState("");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const keySequenceRef = useRef<string[]>([]);
   const keySequenceTimeoutRef = useRef<number | null>(null);
@@ -639,7 +671,23 @@ export function LiraShell() {
         return;
       }
 
-      if (event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (
+        activeView === "projects" &&
+        !selectedTaskId &&
+        keySequenceRef.current.length === 1 &&
+        keySequenceRef.current[0] === leaderKey &&
+        event.key === "Shift"
+      ) {
+        dispatchProjectBoardLift(true);
+      }
+
+      if (
+        !keySequenceRef.current.length &&
+        event.shiftKey &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey
+      ) {
         if (event.key === "H") {
           event.preventDefault();
           navigatePageHistory(-1);
@@ -696,6 +744,36 @@ export function LiraShell() {
       if (nextSequence.join("") === pageSequence.join("")) {
         event.preventDefault();
         setCommandPaletteOpen(true);
+        clearKeySequence();
+        return;
+      }
+
+      if (
+        activeView === "projects" &&
+        !selectedTaskId &&
+        nextSequence.length === 2 &&
+        nextSequence[0] === leaderKey &&
+        nextSequence[1] === "h" &&
+        event.shiftKey &&
+        event.key === "H"
+      ) {
+        event.preventDefault();
+        dispatchProjectBoardMove("left");
+        clearKeySequence();
+        return;
+      }
+
+      if (
+        activeView === "projects" &&
+        !selectedTaskId &&
+        nextSequence.length === 2 &&
+        nextSequence[0] === leaderKey &&
+        nextSequence[1] === "l" &&
+        event.shiftKey &&
+        event.key === "L"
+      ) {
+        event.preventDefault();
+        dispatchProjectBoardMove("right");
         clearKeySequence();
         return;
       }
@@ -785,6 +863,24 @@ export function LiraShell() {
     selectedTaskId,
     settingsOpen,
   ]);
+
+  useEffect(() => {
+    function handleKeyUp(event: KeyboardEvent) {
+      if (activeView !== "projects" || selectedTaskId) {
+        return;
+      }
+
+      if (event.key === "Shift" || event.key === " ") {
+        dispatchProjectBoardLift(false);
+      }
+    }
+
+    window.addEventListener("keyup", handleKeyUp, true);
+
+    return () => {
+      window.removeEventListener("keyup", handleKeyUp, true);
+    };
+  }, [activeView, selectedTaskId]);
 
   useEffect(() => {
     function handleCloseGoalPanel() {
@@ -1376,6 +1472,7 @@ export function LiraShell() {
       dueDate: "",
       completedAt: "",
       estimate: "",
+      customFieldValues: getInitialTaskCustomFieldValues(projects, task.projectId || undefined),
       goalMetric: "tasks_completed",
       goalTarget: 1,
       goalProgress: 0,
@@ -1397,6 +1494,10 @@ export function LiraShell() {
         );
 
         if (!linkedGoal) {
+          return [...current, nextTask];
+        }
+
+        if (linkedGoal.goalScope?.projectId) {
           return [...current, nextTask];
         }
 
@@ -1429,17 +1530,11 @@ export function LiraShell() {
             setSelectedTaskId(nextTask.id);
           }
           setNewTaskOpen(false);
-          setNewTaskGoalId("");
         },
       },
     );
 
     return nextTaskId;
-  }
-
-  function handleOpenCreateTaskForGoal(goalId: string) {
-    setNewTaskGoalId(goalId);
-    setNewTaskOpen(true);
   }
 
   function handleCreateGoal(goal: {
@@ -1449,6 +1544,8 @@ export function LiraShell() {
     period: Item["goalPeriod"];
     metric?: Item["goalMetric"];
     projectId: string;
+    scheduleDays: NonNullable<Item["goalScheduleDays"]>;
+    milestones: NonNullable<Item["goalMilestones"]>;
   }) {
     const timestamp = getCurrentTimestamp();
     const nextGoal: Item = {
@@ -1473,6 +1570,8 @@ export function LiraShell() {
       goalProgress: 0,
       goalProgressByDate: {},
       goalPeriod: goal.period,
+      goalScheduleDays: goal.scheduleDays,
+      goalMilestones: goal.milestones,
       goalScope:
         goal.metric === "tasks_completed" && goal.projectId
           ? { projectId: goal.projectId }
@@ -1504,6 +1603,8 @@ export function LiraShell() {
     period: Item["goalPeriod"];
     metric?: Item["goalMetric"];
     projectId: string;
+    scheduleDays: NonNullable<Item["goalScheduleDays"]>;
+    milestones: NonNullable<Item["goalMilestones"]>;
   }) {
     if (!editingGoalId) {
       return;
@@ -1524,6 +1625,8 @@ export function LiraShell() {
                 goalMetric: goal.metric,
                 goalTarget: goal.target,
                 goalPeriod: goal.period,
+                goalScheduleDays: goal.scheduleDays,
+                goalMilestones: goal.milestones,
                 goalScope:
                   goal.metric === "tasks_completed"
                     ? {
@@ -1546,14 +1649,20 @@ export function LiraShell() {
     );
   }
 
-  function handleCreateProject(project: { name: string; description: string }) {
+  function handleCreateProject(project: {
+    name: string;
+    description: string;
+    hasKanbanBoard: boolean;
+  }) {
     const timestamp = new Date().toISOString();
     const nextProjectId = `project-${Date.now()}`;
     const nextProject: Project = {
       id: nextProjectId,
       name: project.name,
       description: project.description,
-      boardLanes: defaultProjectBoardLanes(nextProjectId),
+      hasKanbanBoard: project.hasKanbanBoard,
+      taskTemplate: undefined,
+      boardLanes: project.hasKanbanBoard ? defaultProjectBoardLanes(nextProjectId) : [],
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -1583,12 +1692,27 @@ export function LiraShell() {
         typeof updates.description === "string"
           ? updates.description.trim()
           : existingProject.description;
-      const nextBoardLanes = updates.boardLanes ?? existingProject.boardLanes;
+      const nextHasKanbanBoard =
+        typeof updates.hasKanbanBoard === "boolean"
+          ? updates.hasKanbanBoard
+          : existingProject.hasKanbanBoard;
+      const nextTaskTemplate =
+        typeof updates.taskTemplate !== "undefined"
+          ? updates.taskTemplate
+          : existingProject.taskTemplate;
+      let nextBoardLanes = updates.boardLanes ?? existingProject.boardLanes;
+
+      if (nextHasKanbanBoard && nextBoardLanes.length === 0) {
+        nextBoardLanes = defaultProjectBoardLanes(projectId);
+      }
+
       const timestamp = new Date().toISOString();
 
       if (
         nextName === existingProject.name &&
         nextDescription === existingProject.description &&
+        nextHasKanbanBoard === existingProject.hasKanbanBoard &&
+        nextTaskTemplate === existingProject.taskTemplate &&
         nextBoardLanes === existingProject.boardLanes
       ) {
         return current;
@@ -1600,6 +1724,8 @@ export function LiraShell() {
               ...project,
               name: nextName,
               description: nextDescription,
+              hasKanbanBoard: nextHasKanbanBoard,
+              taskTemplate: nextTaskTemplate,
               boardLanes: nextBoardLanes,
               updatedAt: timestamp,
             }
@@ -1678,7 +1804,7 @@ export function LiraShell() {
     });
   }
 
-  function handleConvertCaptureToTask(itemId: string) {
+  function handleConvertCaptureToTask(itemId: string, projectId?: string) {
     const timestamp = getCurrentTimestamp();
     const nextTaskId = `item-${Date.now()}`;
 
@@ -1690,6 +1816,8 @@ export function LiraShell() {
           return current;
         }
 
+        const nextProjectId = projectId ?? capture.projectId;
+
         const nextTask: Item = {
           id: nextTaskId,
           kind: "task",
@@ -1700,15 +1828,16 @@ export function LiraShell() {
           createdAt: timestamp,
           updatedAt: timestamp,
           tags: capture.tags,
-          projectId: capture.projectId,
-          projectLaneId: getDefaultProjectLaneId(projects, capture.projectId),
-          project: getProjectName(projects, capture.projectId, capture.project),
+          projectId: nextProjectId,
+          projectLaneId: getDefaultProjectLaneId(projects, nextProjectId),
+          project: getProjectName(projects, nextProjectId, capture.project),
           isCompleted: false,
           priority: "",
           dueDate: "",
           completedAt: "",
           estimate: "",
           sourceCaptureId: capture.id,
+          customFieldValues: getInitialTaskCustomFieldValues(projects, nextProjectId),
           goalMetric: "tasks_completed",
           goalTarget: 1,
           goalProgress: 0,
@@ -1738,7 +1867,7 @@ export function LiraShell() {
     );
   }
 
-  function handleConvertCaptureToGoal(itemId: string) {
+  function handleConvertCaptureToGoal(itemId: string, projectId?: string) {
     const timestamp = getCurrentTimestamp();
     const nextGoalId = `item-${Date.now()}`;
 
@@ -1750,6 +1879,8 @@ export function LiraShell() {
           return current;
         }
 
+        const nextProjectId = projectId ?? capture.projectId;
+
         const nextGoal: Item = {
           id: nextGoalId,
           kind: "goal",
@@ -1760,8 +1891,8 @@ export function LiraShell() {
           createdAt: timestamp,
           updatedAt: timestamp,
           tags: capture.tags,
-          projectId: capture.projectId,
-          project: getProjectName(projects, capture.projectId, capture.project),
+          projectId: nextProjectId,
+          project: getProjectName(projects, nextProjectId, capture.project),
           isCompleted: false,
           priority: "",
           dueDate: "",
@@ -1960,7 +2091,6 @@ export function LiraShell() {
               onUpdateGoal={handleUpdateGoal}
               onDeleteGoal={handleDeleteItem}
               onEditGoal={handleOpenEditGoal}
-              onCreateTaskForGoal={handleOpenCreateTaskForGoal}
               onCreateTask={handleCreateTask}
               onSelectTask={handleSelectTask}
               onOpenProjectTask={handleSelectProjectTask}
@@ -1970,6 +2100,7 @@ export function LiraShell() {
               onUpdateProject={handleUpdateProject}
               onUpdateJournalEntry={handleUpdateJournalEntry}
               onSelectJournalDate={setSelectedJournalDate}
+              onCreateCapture={handleCaptureThought}
               onConvertCaptureToTask={handleConvertCaptureToTask}
               onConvertCaptureToGoal={handleConvertCaptureToGoal}
               onUpdateCaptureState={handleUpdateCaptureState}
@@ -2055,7 +2186,6 @@ export function LiraShell() {
         isOpen={newTaskOpen}
         onClose={() => {
           setNewTaskOpen(false);
-          setNewTaskGoalId("");
         }}
         goals={items
           .filter(
@@ -2067,10 +2197,8 @@ export function LiraShell() {
           .map((goal) => ({
             id: goal.id,
             title: goal.title,
-            remainingSlots: Math.max(0, goal.goalTarget - (goal.goalScope?.taskIds?.length ?? 0)),
             projectId: goal.goalScope?.projectId,
           }))}
-        initialGoalId={newTaskGoalId}
         projects={projects}
         onSubmit={handleCreateTask}
       />
@@ -2100,6 +2228,8 @@ export function LiraShell() {
                   period: goal.goalPeriod,
                   metric: goal.goalMetric,
                   projectId: goal.goalScope?.projectId ?? goal.projectId ?? "",
+                  scheduleDays: goal.goalScheduleDays ?? [],
+                  milestones: goal.goalMilestones ?? [],
                 };
               })()
             : undefined

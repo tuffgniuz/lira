@@ -12,6 +12,7 @@ type TasksPageProps = {
   projects: Project[];
   onSelectTask: (taskId: string) => void;
   onDeleteTask: (taskId: string) => void;
+  onNotify: (message: string) => void;
 };
 
 const filterItems: Array<{ id: "open" | "completed" | "all"; label: string }> = [
@@ -27,19 +28,46 @@ const taskListMotionOffsets = {
   ArrowUp: -1,
 } as const satisfies Record<string, 1 | -1>;
 
+function isTypingTarget(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    (target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.tagName === "SELECT" ||
+      target.isContentEditable ||
+      target.getAttribute("contenteditable") === "true" ||
+      target.closest("[contenteditable]") !== null)
+  );
+}
+
 export function TasksPage({
   items,
   projects,
   onSelectTask,
   onDeleteTask,
+  onNotify,
 }: TasksPageProps) {
   const [activeFilter, setActiveFilter] = useState<"open" | "completed" | "all">("all");
   const [activeTaskId, setActiveTaskId] = useState("");
+  const [deleteChordArmed, setDeleteChordArmed] = useState(false);
   const [pendingDeleteTask, setPendingDeleteTask] = useState<{
     id: string;
     title: string;
   } | null>(null);
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
+
+  const filterCounts = useMemo(
+    () => ({
+      open: items.filter(
+        (item) => item.kind === "task" && item.state !== "deleted" && !item.isCompleted,
+      ).length,
+      completed: items.filter(
+        (item) => item.kind === "task" && item.state !== "deleted" && item.isCompleted,
+      ).length,
+      all: items.filter((item) => item.kind === "task" && item.state !== "deleted").length,
+    }),
+    [items],
+  );
 
   const rows = useMemo(() => {
     return items
@@ -87,22 +115,88 @@ export function TasksPage({
   }, [activeTaskId]);
 
   useEffect(() => {
+    if (!deleteChordArmed) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDeleteChordArmed(false);
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [deleteChordArmed]);
+
+  useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (pendingDeleteTask) {
         return;
       }
 
-      const target = event.target;
-      const isTypingTarget =
-        target instanceof HTMLElement &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          target.isContentEditable ||
-          target.getAttribute("contenteditable") === "true" ||
-          target.closest("[contenteditable]") !== null);
+      if (isTypingTarget(event.target)) {
+        return;
+      }
 
-      if (isTypingTarget) {
+      if (event.key === "Escape") {
+        setDeleteChordArmed(false);
+        return;
+      }
+
+      if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (event.key === "1") {
+          event.preventDefault();
+          setActiveFilter("open");
+          setDeleteChordArmed(false);
+          return;
+        }
+
+        if (event.key === "2") {
+          event.preventDefault();
+          setActiveFilter("completed");
+          setDeleteChordArmed(false);
+          return;
+        }
+
+        if (event.key === "3") {
+          event.preventDefault();
+          setActiveFilter("all");
+          setDeleteChordArmed(false);
+          return;
+        }
+      }
+
+      if (
+        deleteChordArmed &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        event.key.toLowerCase() !== "d"
+      ) {
+        setDeleteChordArmed(false);
+      }
+
+      if (event.key.toLowerCase() === "d") {
+        if (!activeTaskId) {
+          return;
+        }
+
+        event.preventDefault();
+
+        if (!deleteChordArmed) {
+          setDeleteChordArmed(true);
+          return;
+        }
+
+        const activeRow = rows.find((row) => row.id === activeTaskId);
+
+        if (!activeRow) {
+          setDeleteChordArmed(false);
+          return;
+        }
+
+        setPendingDeleteTask({ id: activeRow.id, title: activeRow.title });
+        setDeleteChordArmed(false);
         return;
       }
 
@@ -136,19 +230,24 @@ export function TasksPage({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [activeTaskId, pendingDeleteTask, rows]);
+  }, [activeTaskId, deleteChordArmed, pendingDeleteTask, rows]);
 
   return (
     <PageShell ariaLabel="Tasks" eyebrow="Tasks" className="page--tasks">
-      <div className="tasks-toolbar" aria-label="Task filters">
+      <div className="tasks-toolbar inbox-filters" aria-label="Task filters">
         {filterItems.map((item) => (
           <button
             key={item.id}
             type="button"
-            className={`tasks-filter ${activeFilter === item.id ? "is-active" : ""}`}
+            className={`tasks-filter inbox-filter ${
+              activeFilter === item.id ? "is-active inbox-filter--active" : ""
+            }`}
             onClick={() => setActiveFilter(item.id)}
           >
-            {item.label}
+            <span>{item.label}</span>
+            <span className="inbox-filter__count" aria-hidden="true">
+              {filterCounts[item.id]}
+            </span>
           </button>
         ))}
       </div>
@@ -233,6 +332,7 @@ export function TasksPage({
           onConfirm={() => {
             onDeleteTask(pendingDeleteTask.id);
             setPendingDeleteTask(null);
+            onNotify(`Task "${pendingDeleteTask.title}" deleted`);
           }}
         />
       ) : null}
@@ -253,6 +353,18 @@ function TaskDeleteConfirmModal({
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        onConfirm();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onConfirm]);
+
   return (
     <Modal ariaLabelledBy="task-delete-confirm-title" className="inbox-confirm" onClose={onClose}>
       <div className="inbox-confirm__content">

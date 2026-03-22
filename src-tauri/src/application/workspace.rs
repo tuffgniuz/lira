@@ -2,14 +2,16 @@ use crate::persistence::capture_repository::CaptureRepository;
 use crate::persistence::database::Database;
 use crate::persistence::goal_repository::GoalRepository;
 use crate::persistence::models::{
-    Capture, CaptureLifecycleStatus, CaptureTriageStatus, EntityTag, Goal, GoalProgressEntry,
-    GoalStatus, GoalTrackingMode, GoalType, Relationship, Tag, Task, TaskLifecycleStatus,
-    TaskQuery, TaskScheduleBucket,
+    Capture, CaptureLifecycleStatus, CaptureTriageStatus, EntityTag, Goal, GoalMilestone,
+    GoalProgressEntry, GoalStatus, GoalTrackingMode, GoalType, Relationship, Tag, Task,
+    TaskLifecycleStatus, TaskQuery, TaskScheduleBucket,
 };
 use crate::persistence::relationship_repository::RelationshipRepository;
 use crate::persistence::tag_repository::TagRepository;
 use crate::persistence::task_repository::TaskRepository;
-use crate::transport::workspace::{WorkspaceGoalScopeDto, WorkspaceItemDto};
+use crate::transport::workspace::{
+    WorkspaceGoalMilestoneDto, WorkspaceGoalScopeDto, WorkspaceItemDto,
+};
 use rusqlite::OptionalExtension;
 
 pub fn load_workspace_items_from_db(db: &Database) -> Result<Vec<WorkspaceItemDto>, String> {
@@ -108,11 +110,14 @@ fn workspace_item_from_capture(capture: Capture) -> WorkspaceItemDto {
         estimate: String::new(),
         schedule_bucket: None,
         source_capture_id: None,
+        custom_field_values: std::collections::HashMap::new(),
         goal_metric: None,
         goal_target: 1,
         goal_progress: 0,
         goal_progress_by_date: std::collections::HashMap::new(),
         goal_period: "weekly".into(),
+        goal_schedule_days: Vec::new(),
+        goal_milestones: Vec::new(),
         goal_scope: None,
     }
 }
@@ -145,11 +150,14 @@ fn workspace_item_from_task(task: Task) -> WorkspaceItemDto {
             .unwrap_or_default(),
         schedule_bucket: Some(encode_task_schedule_bucket(&task.schedule_bucket)),
         source_capture_id: task.source_capture_id,
+        custom_field_values: task.custom_field_values,
         goal_metric: None,
         goal_target: 1,
         goal_progress: 0,
         goal_progress_by_date: std::collections::HashMap::new(),
         goal_period: "weekly".into(),
+        goal_schedule_days: Vec::new(),
+        goal_milestones: Vec::new(),
         goal_scope: None,
     }
 }
@@ -198,11 +206,23 @@ fn workspace_item_from_goal(
         estimate: String::new(),
         schedule_bucket: None,
         source_capture_id: None,
+        custom_field_values: std::collections::HashMap::new(),
         goal_metric: goal.metric,
         goal_target: goal.target_value.unwrap_or(1.0) as i64,
         goal_progress: goal.current_value.unwrap_or(0.0) as i64,
         goal_progress_by_date,
         goal_period: goal.period_unit.unwrap_or_else(|| "weekly".into()),
+        goal_schedule_days: goal.schedule_days,
+        goal_milestones: goal
+            .milestones
+            .into_iter()
+            .map(|milestone| WorkspaceGoalMilestoneDto {
+                id: milestone.id,
+                title: milestone.title,
+                is_completed: milestone.is_completed,
+                completed_at: milestone.completed_at.unwrap_or_default(),
+            })
+            .collect(),
         goal_scope: Some(WorkspaceGoalScopeDto {
             project_id: goal.scope_project_id,
             tag: goal.scope_tag,
@@ -264,6 +284,7 @@ fn task_from_workspace_item(item: WorkspaceItemDto) -> Result<Task, String> {
         project_lane_id: item.project_lane_id,
         schedule_bucket: decode_task_schedule_bucket(item.schedule_bucket.as_deref(), &item.due_date)?,
         source_capture_id: item.source_capture_id,
+        custom_field_values: item.custom_field_values,
         created_at: item.created_at,
         updated_at: item.updated_at,
     })
@@ -287,7 +308,13 @@ pub(crate) fn goal_from_workspace_item(item: WorkspaceItemDto) -> Result<Goal, S
             GoalTrackingMode::Manual
         },
         metric: item.goal_metric,
-        target_value: Some(item.goal_target as f64),
+        target_value: Some(
+            if item.goal_milestones.is_empty() {
+                item.goal_target
+            } else {
+                item.goal_milestones.len() as i64
+            } as f64,
+        ),
         current_value: Some(item.goal_progress as f64),
         period_unit: empty_string_to_none(item.goal_period),
         period_start: None,
@@ -300,6 +327,21 @@ pub(crate) fn goal_from_workspace_item(item: WorkspaceItemDto) -> Result<Goal, S
             .or(item.project_id),
         scope_tag: goal_scope.and_then(|scope| scope.tag),
         source_query: None,
+        schedule_days: item.goal_schedule_days,
+        milestones: item
+            .goal_milestones
+            .into_iter()
+            .enumerate()
+            .map(|(index, milestone)| GoalMilestone {
+                id: milestone.id,
+                title: milestone.title,
+                sort_order: index as i64,
+                is_completed: milestone.is_completed,
+                completed_at: empty_string_to_none(milestone.completed_at),
+                created_at: item.created_at.clone(),
+                updated_at: item.updated_at.clone(),
+            })
+            .collect(),
         created_at: item.created_at,
         updated_at: item.updated_at,
         archived_at: None,

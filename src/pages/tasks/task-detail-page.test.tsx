@@ -89,6 +89,7 @@ function createTask(overrides: Partial<Item> = {}): Item {
     goalProgress: 0,
     goalProgressByDate: {},
     goalPeriod: "weekly",
+    customFieldValues: {},
     ...overrides,
   };
 }
@@ -98,7 +99,9 @@ function createProject(overrides: Partial<Project> = {}): Project {
     id: "project-1",
     name: "Lira",
     description: "",
+    hasKanbanBoard: true,
     boardLanes: defaultProjectBoardLanes("project-1"),
+    taskTemplate: undefined,
     createdAt: "2026-03-21T00:00:00.000Z",
     updatedAt: "2026-03-21T00:00:00.000Z",
     ...overrides,
@@ -111,6 +114,7 @@ function renderTaskDetailPage(
   const onBack = vi.fn();
   const onUpdateTask = vi.fn();
   const onDeleteTask = vi.fn();
+  const onNotify = vi.fn();
 
   render(
     <TaskDetailPage
@@ -119,11 +123,12 @@ function renderTaskDetailPage(
       onBack={onBack}
       onUpdateTask={onUpdateTask}
       onDeleteTask={onDeleteTask}
+      onNotify={onNotify}
       {...props}
     />,
   );
 
-  return { onBack, onUpdateTask, onDeleteTask };
+  return { onBack, onUpdateTask, onDeleteTask, onNotify };
 }
 
 describe("TaskDetailPage", () => {
@@ -142,7 +147,7 @@ describe("TaskDetailPage", () => {
       const heading = screen.getByRole("heading", { name: "Build task detail page" });
       expect(heading).toBeInTheDocument();
       expect(heading.closest(".task-detail-page__content")).not.toBeNull();
-      expect(screen.getByText("Open • Lira")).toBeInTheDocument();
+      expect(screen.getByText("Open • Lira • CREATED YESTERDAY")).toBeInTheDocument();
 
       fireEvent.change(screen.getByRole("textbox", { name: "Task description" }), {
         target: { value: "Ship the dedicated detail page." },
@@ -154,9 +159,6 @@ describe("TaskDetailPage", () => {
       expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
         content: "Ship the dedicated detail page.",
       });
-
-      fireEvent.click(screen.getByRole("button", { name: "Back to tasks" }));
-      expect(onBack).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
     }
@@ -212,6 +214,105 @@ describe("TaskDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     expect(onDeleteTask).toHaveBeenCalledWith("task-1");
+  });
+
+  it("renders project template fields and updates custom task values", () => {
+    const { onUpdateTask } = renderTaskDetailPage({
+      task: createTask({
+        customFieldValues: {
+          task_id: "TASK-41",
+        },
+      }),
+      projects: [
+        createProject({
+          taskTemplate: {
+            updatedAt: "2026-03-21T00:00:00.000Z",
+            fields: [
+              {
+                id: "field-task-id",
+                key: "task_id",
+                label: "Task ID",
+                type: "text",
+              },
+              {
+                id: "field-stage-uuid",
+                key: "stage_uuid",
+                label: "Stage UUID",
+                type: "text",
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    expect(screen.getByLabelText("Project fields")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Task ID" })).toHaveValue("TASK-41");
+    expect(screen.getByRole("textbox", { name: "Stage UUID" })).toHaveValue("");
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Stage UUID" }), {
+      target: { value: "stage-abc-123" },
+    });
+
+    expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
+      customFieldValues: {
+        task_id: "TASK-41",
+        stage_uuid: "stage-abc-123",
+      },
+    });
+  });
+
+  it("renders non-text project fields with matching control types", () => {
+    const { onUpdateTask } = renderTaskDetailPage({
+      task: createTask({
+        customFieldValues: {
+          stage_ready: "true",
+          estimate_points: "8",
+          review_date: "2026-03-28",
+        },
+      }),
+      projects: [
+        createProject({
+          taskTemplate: {
+            updatedAt: "2026-03-21T00:00:00.000Z",
+            fields: [
+              {
+                id: "field-stage-ready",
+                key: "stage_ready",
+                label: "Stage Ready",
+                type: "boolean",
+              },
+              {
+                id: "field-estimate-points",
+                key: "estimate_points",
+                label: "Estimate Points",
+                type: "number",
+              },
+              {
+                id: "field-review-date",
+                key: "review_date",
+                label: "Review Date",
+                type: "date",
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    expect(screen.getByRole("checkbox", { name: "Stage Ready" })).toBeChecked();
+    expect(screen.getByRole("spinbutton", { name: "Estimate Points" })).toHaveValue(8);
+    expect(screen.getByLabelText("Review Date")).toHaveValue("2026-03-28");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Stage Ready" }));
+
+    expect(onUpdateTask).toHaveBeenCalledWith("task-1", {
+      customFieldValues: {
+        stage_ready: "false",
+        estimate_points: "8",
+        review_date: "2026-03-28",
+      },
+    });
   });
 
   it("keeps the latest local draft when the parent rerenders with stale task content", () => {

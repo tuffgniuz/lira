@@ -9,6 +9,7 @@ export type InboxCaptureView = {
   text: string;
   state: InboxCaptureState;
   createdAt: string;
+  projectId?: string;
   projectName: string;
   tags: string[];
 };
@@ -23,6 +24,7 @@ export function buildInboxCaptureViews(items: Item[], projects: Project[]): Inbo
       text: item.content || item.title,
       state: item.state,
       createdAt: item.createdAt,
+      projectId: item.projectId,
       projectName: getProjectName(projects, item.projectId, item.project),
       tags: item.tags,
     }));

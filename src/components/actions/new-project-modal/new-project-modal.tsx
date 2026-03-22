@@ -10,15 +10,17 @@ export function NewProjectModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (project: { name: string; description: string }) => void;
+  onSubmit: (project: { name: string; description: string; hasKanbanBoard: boolean }) => void;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [hasKanbanBoard, setHasKanbanBoard] = useState(false);
 
   useEffect(() => {
     if (!isOpen) {
       setName("");
       setDescription("");
+      setHasKanbanBoard(false);
     }
   }, [isOpen]);
 
@@ -40,6 +42,7 @@ export function NewProjectModal({
     onSubmit({
       name: name.trim(),
       description: description.trim(),
+      hasKanbanBoard,
     });
   }
 
@@ -80,6 +83,28 @@ export function NewProjectModal({
             aria-label="Project description"
           />
         </FormField>
+        <label
+          className={`project-mode-toggle ${hasKanbanBoard ? "is-checked" : ""}`.trim()}
+        >
+          <input
+            type="checkbox"
+            className="project-mode-toggle__checkbox"
+            checked={hasKanbanBoard}
+            onChange={(event) => setHasKanbanBoard(event.target.checked)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                submitProject();
+              }
+            }}
+            aria-label="Enable kanban board"
+          />
+          <span
+            className={`project-mode-toggle__switch ${hasKanbanBoard ? "is-checked" : ""}`.trim()}
+            aria-hidden="true"
+          />
+          <span className="project-mode-toggle__label">Enable kanban board</span>
+        </label>
       </form>
     </Modal>
   );

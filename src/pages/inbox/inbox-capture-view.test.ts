@@ -37,6 +37,7 @@ describe("buildInboxCaptureViews", () => {
         id: "project-1",
         name: "Lira",
         description: "",
+        hasKanbanBoard: true,
         boardLanes: defaultProjectBoardLanes("project-1"),
         createdAt: "2026-03-20T00:00:00.000Z",
         updatedAt: "2026-03-20T00:00:00.000Z",
