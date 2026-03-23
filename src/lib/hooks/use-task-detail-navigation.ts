@@ -65,7 +65,7 @@ export function useTaskDetailNavigation() {
       ].join(", ");
 
       const focusableElements = Array.from(
-        container.querySelectorAll<HTMLElement>(focusableSelectors)
+        container?.querySelectorAll<HTMLElement>(focusableSelectors) ?? []
       ).filter(el => {
         if (el.closest('[role="dialog"]') || el.closest(".ui-modal") || el.closest(".task-detail-page__header-actions")) {
           return false;

@@ -1,9 +1,7 @@
 import type { Item } from "@/models/workspace-item";
-import type { JournalEntrySummary } from "@/models/journal";
 
 type GoalProgressContext = {
   items: Item[];
-  journalSummaries: JournalEntrySummary[];
   todayDate: string;
 };
 

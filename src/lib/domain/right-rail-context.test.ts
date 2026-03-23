@@ -39,7 +39,7 @@ describe("buildRightRailContext", () => {
       createItem({ id: "goal-2", kind: "goal", title: "Weekly goal", goalPeriod: "weekly" }),
     ];
 
-    const context = buildRightRailContext(items, [], "2026-03-17");
+    const context = buildRightRailContext(items, "2026-03-17");
 
     expect(context.remainingTasksForToday).toBe(2);
     expect(context.goals).toEqual([

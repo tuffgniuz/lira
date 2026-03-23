@@ -2,13 +2,10 @@ import { viewTitles } from "@/app/navigation/navigation";
 import type { ViewId } from "@/app/navigation/types";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { PageShell } from "@/components/layout/page-shell";
-import { Panel } from "@/components/data-display/panel";
 import type { Item } from "@/models/workspace-item";
-import type { JournalEntry, JournalEntrySummary } from "@/models/journal";
 import type { Project } from "@/models/project";
 import { CaptureInboxPage } from "@/pages/inbox/capture-inbox-page";
 import { buildInboxCaptureViews } from "@/pages/inbox/inbox-capture-view";
-import { JournalingPage } from "@/pages/journaling/journaling-page";
 import { GoalsPage } from "@/pages/goals/goals-page";
 import { ProjectsPage } from "@/pages/projects/projects-page";
 import { TaskDetailPage } from "@/pages/tasks/task-detail-page";
@@ -18,10 +15,6 @@ type PageContentProps = {
   activeView: ViewId;
   items: Item[];
   todayDate: string;
-  journalSummaries: JournalEntrySummary[];
-  selectedJournalDate: string;
-  journalEntry: JournalEntry;
-  todayJournalEntry: JournalEntry;
   projects: Project[];
   selectedProjectId: string;
   selectedGoalId: string;
@@ -44,8 +37,6 @@ type PageContentProps = {
   onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
   onDeleteTask: (taskId: string) => void;
   onUpdateProject: (projectId: string, updates: Partial<Project>) => void;
-  onUpdateJournalEntry: (updates: Partial<JournalEntry>) => void;
-  onSelectJournalDate: (date: string) => void;
   onCreateCapture: (value: string) => void;
   onConvertCaptureToTask: (captureId: string, projectId?: string) => void;
   onConvertCaptureToGoal: (captureId: string, projectId?: string) => void;
@@ -61,10 +52,6 @@ export function PageContent({
   activeView,
   items,
   todayDate,
-  journalSummaries,
-  selectedJournalDate,
-  journalEntry,
-  todayJournalEntry,
   projects,
   selectedProjectId,
   selectedGoalId,
@@ -80,8 +67,6 @@ export function PageContent({
   onUpdateTask,
   onDeleteTask,
   onUpdateProject,
-  onUpdateJournalEntry,
-  onSelectJournalDate,
   onCreateCapture,
   onConvertCaptureToTask,
   onConvertCaptureToGoal,
@@ -93,12 +78,6 @@ export function PageContent({
     return (
       <PageShell ariaLabel="Dashboard" className="page--dashboard">
         <h1 className="home-greeting">{getGreetingForTime(new Date())}</h1>
-        {todayJournalEntry.morningIntention.trim() ? (
-          <Panel as="article" className="home-intention-card app-card" aria-label="Today's intention">
-            <p className="home-intention-card__label">Today&apos;s intention</p>
-            <p className="home-intention-card__body">{todayJournalEntry.morningIntention}</p>
-          </Panel>
-        ) : null}
       </PageShell>
     );
   }
@@ -123,7 +102,6 @@ export function PageContent({
       <GoalsPage
         items={items}
         projects={projects}
-        journalSummaries={journalSummaries}
         todayDate={todayDate}
         selectedGoalId={selectedGoalId}
         onSelectGoal={onSelectGoal}
@@ -173,20 +151,6 @@ export function PageContent({
     );
   }
 
-  if (activeView === "journaling") {
-    return (
-      <JournalingPage
-        todayDate={todayDate}
-        selectedDate={selectedJournalDate}
-        entry={journalEntry}
-        entries={journalSummaries}
-        items={items}
-        onSelectDate={onSelectJournalDate}
-        onUpdateEntry={onUpdateJournalEntry}
-      />
-    );
-  }
-
   if (activeView === "projects") {
     const selectedTask =
       items.find((item) => item.id === selectedTaskId && item.kind === "task") ?? null;
@@ -208,7 +172,6 @@ export function PageContent({
           <ProjectsPage
             projects={projects}
             items={items}
-            journalSummaries={journalSummaries}
             todayDate={todayDate}
             selectedProjectId={selectedProjectId}
             onUpdateProject={onUpdateProject}
@@ -223,7 +186,6 @@ export function PageContent({
         <ProjectsPage
           projects={projects}
           items={items}
-          journalSummaries={journalSummaries}
           todayDate={todayDate}
           selectedProjectId={selectedProjectId}
           onUpdateProject={onUpdateProject}

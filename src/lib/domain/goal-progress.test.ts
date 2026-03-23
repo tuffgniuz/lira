@@ -59,7 +59,6 @@ describe("goal progress", () => {
 
     const progress = resolveGoalProgress(goal, {
       items,
-      journalSummaries: [],
       todayDate: "2026-03-16",
     });
 
@@ -89,7 +88,6 @@ describe("goal progress", () => {
 
     const progress = resolveGoalProgress(goal, {
       items,
-      journalSummaries: [],
       todayDate: "2026-03-16",
     });
 
@@ -110,14 +108,12 @@ describe("goal progress", () => {
 
     const progress = resolveGoalProgress(goal, {
       items: [],
-      journalSummaries: [],
       todayDate: "2026-03-16",
     });
 
     expect(progress.completedCount).toBe(1);
     expect(resolveGoalProgressForDate(goal, {
       items: [],
-      journalSummaries: [],
       todayDate: "2026-03-16",
     }, "2026-03-16")).toBe(1);
   });
@@ -142,7 +138,6 @@ describe("goal progress", () => {
 
     const progress = resolveGoalProgress(goal, {
       items,
-      journalSummaries: [],
       todayDate: "2026-03-22",
     });
 
@@ -151,7 +146,6 @@ describe("goal progress", () => {
     expect(progress.progressDenominator).toBe(0);
     expect(resolveGoalProgressForDate(goal, {
       items,
-      journalSummaries: [],
       todayDate: "2026-03-22",
     }, "2026-03-22")).toBe(0);
   });
@@ -170,7 +164,6 @@ describe("goal progress", () => {
 
     const progress = resolveGoalProgress(goal, {
       items: [],
-      journalSummaries: [],
       todayDate: "2026-03-22",
     });
 

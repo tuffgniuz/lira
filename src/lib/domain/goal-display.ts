@@ -1,10 +1,8 @@
-import type { JournalEntrySummary } from "@/models/journal";
 import type { Item } from "@/models/workspace-item";
 import { resolveGoalProgressForDate } from "./goal-progress";
 
 export type GoalProgressContext = {
   items: Item[];
-  journalSummaries: JournalEntrySummary[];
   todayDate: string;
 };
 

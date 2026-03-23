@@ -114,26 +114,6 @@ pub fn run_migrations(connection: &Connection) -> Result<(), String> {
                 FOREIGN KEY(goal_id) REFERENCES goals(id) ON DELETE CASCADE
             );
 
-            CREATE TABLE IF NOT EXISTS journal_entries (
-                id TEXT PRIMARY KEY,
-                entry_date TEXT NOT NULL UNIQUE,
-                title TEXT,
-                content_markdown TEXT,
-                morning_intention TEXT,
-                reflection_prompt TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS journal_commitments (
-                id TEXT PRIMARY KEY,
-                journal_entry_id TEXT NOT NULL,
-                text TEXT NOT NULL,
-                status TEXT NOT NULL,
-                sort_order INTEGER NOT NULL,
-                FOREIGN KEY(journal_entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE
-            );
-
             CREATE TABLE IF NOT EXISTS tags (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,

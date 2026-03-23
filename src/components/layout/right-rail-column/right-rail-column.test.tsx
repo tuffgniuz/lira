@@ -43,7 +43,6 @@ describe("RightRailColumn", () => {
             goalTarget: 1,
           }),
         ]}
-        journalSummaries={[]}
         todayDate="2026-03-17"
       />,
     );
@@ -67,7 +66,6 @@ describe("RightRailColumn", () => {
             goalScope: { projectId: "project-1" },
           }),
         ]}
-        journalSummaries={[]}
         todayDate="2026-03-17"
       />,
     );
@@ -91,7 +89,6 @@ describe("RightRailColumn", () => {
             goalScope: { projectId: "project-1" },
           }),
         ]}
-        journalSummaries={[]}
         todayDate="2026-03-18"
       />,
     );

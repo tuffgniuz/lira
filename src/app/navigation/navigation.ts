@@ -1,6 +1,5 @@
 import type { NavItem, ViewId } from "./types";
 import {
-  BookOpenIcon,
   CheckSquareIcon,
   InboxIcon,
   LayersIcon,
@@ -43,7 +42,6 @@ export const navigationItems: NavItem[] = [
   { id: "goals", label: "Goals", icon: TargetIcon },
   { id: "tasks", label: "Tasks", icon: CheckSquareIcon },
   { id: "projects", label: "Projects", icon: LayersIcon },
-  { id: "journaling", label: "Journaling", icon: BookOpenIcon },
 ];
 
 export const viewTitles: Record<ViewId, string> = {
@@ -52,5 +50,4 @@ export const viewTitles: Record<ViewId, string> = {
   goals: "Goals",
   tasks: "Tasks",
   projects: "Projects",
-  journaling: "Journaling",
 };

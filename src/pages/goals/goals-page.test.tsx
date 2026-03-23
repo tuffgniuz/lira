@@ -2,7 +2,6 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { GoalsPage } from "./goals-page";
 import type { Item } from "@/models/workspace-item";
-import type { JournalEntrySummary } from "@/models/journal";
 import type { Project } from "@/models/project";
 
 function setViewportWidth(width: number) {
@@ -70,7 +69,6 @@ describe("GoalsPage", () => {
           },
         ] as Item[]}
         projects={[] as Project[]}
-        journalSummaries={[] as JournalEntrySummary[]}
         todayDate="2026-03-17"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
@@ -117,7 +115,6 @@ describe("GoalsPage", () => {
           },
         ] as Item[]}
         projects={[] as Project[]}
-        journalSummaries={[] as JournalEntrySummary[]}
         todayDate="2026-03-17"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
@@ -195,7 +192,6 @@ describe("GoalsPage", () => {
           },
         ] as Item[]}
         projects={[] as Project[]}
-        journalSummaries={[] as JournalEntrySummary[]}
         todayDate="2026-03-17"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
@@ -251,7 +247,6 @@ describe("GoalsPage", () => {
           },
         ] as Item[]}
         projects={[] as Project[]}
-        journalSummaries={[] as JournalEntrySummary[]}
         todayDate="2026-03-17"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
@@ -285,7 +280,6 @@ describe("GoalsPage", () => {
           }),
         ] as Item[]}
         projects={[] as Project[]}
-        journalSummaries={[] as JournalEntrySummary[]}
         todayDate="2026-03-18"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
@@ -332,7 +326,6 @@ describe("GoalsPage", () => {
           }),
         ] as Item[]}
         projects={[] as Project[]}
-        journalSummaries={[] as JournalEntrySummary[]}
         todayDate="2026-03-22"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
@@ -372,7 +365,6 @@ describe("GoalsPage", () => {
       <GoalsPage
         items={[] as Item[]}
         projects={[] as Project[]}
-        journalSummaries={[] as JournalEntrySummary[]}
         todayDate="2026-03-17"
         selectedGoalId=""
         onSelectGoal={vi.fn()}
@@ -396,7 +388,6 @@ describe("GoalsPage", () => {
       <GoalsPage
         items={[createGoal()]}
         projects={[] as Project[]}
-        journalSummaries={[] as JournalEntrySummary[]}
         todayDate="2026-03-17"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
@@ -421,7 +412,6 @@ describe("GoalsPage", () => {
       <GoalsPage
         items={[createGoal()]}
         projects={[] as Project[]}
-        journalSummaries={[] as JournalEntrySummary[]}
         todayDate="2026-03-17"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}

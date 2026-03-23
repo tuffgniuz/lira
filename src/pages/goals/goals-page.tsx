@@ -16,13 +16,11 @@ import {
 } from "@/lib/domain/goal-display";
 import { getProjectName } from "@/lib/domain/project-relations";
 import type { GoalPeriod, Item } from "@/models/workspace-item";
-import type { JournalEntrySummary } from "@/models/journal";
 import type { Project } from "@/models/project";
 
 type GoalsPageProps = {
   items: Item[];
   projects: Project[];
-  journalSummaries: JournalEntrySummary[];
   todayDate: string;
   selectedGoalId: string;
   onSelectGoal: (goalId: string) => void;
@@ -44,7 +42,6 @@ const periodOptions: Array<{ id: GoalPeriod; label: string }> = [
 export function GoalsPage({
   items,
   projects,
-  journalSummaries,
   todayDate,
   selectedGoalId,
   onSelectGoal,
@@ -66,7 +63,6 @@ export function GoalsPage({
   const filteredGoals = goals.filter((goal) => goal.goalPeriod === activePeriod);
   const progressContext = {
     items,
-    journalSummaries,
     todayDate,
   };
   const layoutMode = resolveGoalsLayoutMode(windowWidth);
@@ -324,7 +320,7 @@ export function GoalsPage({
             )
         }
         right={
-          <RightRailColumn items={items} journalSummaries={journalSummaries} todayDate={todayDate} />
+          <RightRailColumn items={items} todayDate={todayDate} />
         }
       />
 
@@ -334,7 +330,7 @@ export function GoalsPage({
           aria-label="Goal insights"
           data-testid="goals-stacked-insights"
         >
-          <RightRailColumn items={items} journalSummaries={journalSummaries} todayDate={todayDate} />
+          <RightRailColumn items={items} todayDate={todayDate} />
         </section>
       ) : null}
 
@@ -410,7 +406,6 @@ function GoalDailyWeekStrip({
 	todayDate: string;
 	progressContext: {
 		items: Item[];
-		journalSummaries: JournalEntrySummary[];
 		todayDate: string;
 	};
 }) {

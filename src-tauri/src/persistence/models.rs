@@ -187,38 +187,6 @@ pub struct GoalProgressEntry {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct JournalEntry {
-    pub id: String,
-    pub entry_date: String,
-    pub title: Option<String>,
-    pub content_markdown: Option<String>,
-    pub morning_intention: Option<String>,
-    pub reflection_prompt: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum JournalCommitmentStatus {
-    Open,
-    Missed,
-    Partial,
-    Done,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct JournalCommitment {
-    pub id: String,
-    pub journal_entry_id: String,
-    pub text: String,
-    pub status: JournalCommitmentStatus,
-    pub sort_order: i64,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ProjectStatus {
@@ -288,14 +256,6 @@ pub struct TaskQuery {
     pub is_completed: Option<bool>,
     pub schedule_bucket: Option<TaskScheduleBucket>,
     pub project_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct JournalEntrySummary {
-    pub entry_date: String,
-    pub title: Option<String>,
-    pub preview: String,
 }
 
 fn default_project_task_template_field_type() -> ProjectTaskTemplateFieldType {

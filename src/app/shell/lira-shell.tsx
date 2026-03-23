@@ -10,6 +10,7 @@ import {
   SettingsIcon,
   SparkIcon,
 } from "@/components/icons";
+import type { ViewId } from "@/app/navigation/types";
 import {
   readStoredVaultPath,
   navigationItems,
@@ -20,12 +21,7 @@ import {
   listTasksSequence, mappedSequences, newGoalSequence, newInboxItemSequence,
   newProjectSequence, newTaskSequence, normalizeMappedKey, pageSequence, sequenceStartsWith,
 } from "@/app/navigation/keymappings";
-import type { ViewId } from "@/app/navigation/types";
-import {
-  listJournalEntries,
-  loadJournalEntry,
-  saveJournalEntry,
-} from "@/services/journal";
+
 import { loadProfile, saveProfile } from "@/services/profile";
 import { loadProjects, saveProjects } from "@/services/projects";
 import { updateTask as persistTaskUpdate, type PersistedTask } from "@/services/tasks";
@@ -39,12 +35,7 @@ import {
   attachProjectIdsFromNames,
   getProjectName,
 } from "@/lib/domain/project-relations";
-import {
-  applyJournalEntryUpdates,
-  upsertJournalSummary,
-} from "@/lib/domain/journal-entry-state";
 import type { Item } from "@/models/workspace-item";
-import type { JournalEntry, JournalEntrySummary } from "@/models/journal";
 import type { Project } from "@/models/project";
 import { defaultProjectBoardLanes } from "@/models/project-board";
 import type { UserProfile } from "@/models/profile";
@@ -188,65 +179,12 @@ function isTypingTarget(target: EventTarget | null) {
   );
 }
 
-function createDefaultJournalEntry(date: string): JournalEntry {
-  return {
-    id: `journal-${date}`,
-    date,
-    morningIntention: "",
-    diaryEntry: "",
-    reflectionEntry: "",
-    focuses: [],
-    commitments: [],
-    reflection: {
-      wentWell: "",
-      didntGoWell: "",
-      learned: "",
-      gratitude: "",
-    },
-    createdAt: "today",
-    updatedAt: "today",
-  };
-}
-
-function shiftDateString(date: string, amount: number) {
-  const current = new Date(`${date}T00:00:00`);
-  current.setDate(current.getDate() + amount);
-
-  const year = current.getFullYear();
-  const month = `${current.getMonth() + 1}`.padStart(2, "0");
-  const day = `${current.getDate()}`.padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function createDefaultJournalSummaries(todayDate: string): JournalEntrySummary[] {
-  return [
-    {
-      date: shiftDateString(todayDate, -1),
-      preview: "Read the project instructions, finish the transcript review, close two tasks.",
-    },
-    {
-      date: todayDate,
-      preview: "Ship the review notes and tighten the journal interactions.",
-    },
-    {
-      date: shiftDateString(todayDate, -2),
-      preview: "Draft the daily goals layout and capture rough copy ideas.",
-    },
-    {
-      date: shiftDateString(todayDate, -3),
-      preview: "Sort inbox notes, clarify the next project milestone, keep scope narrow.",
-    },
-  ];
-}
-
 type ListPaletteKind = "projects" | "tasks" | "goals" | "inbox";
 type NavigationLocation = {
   view: ViewId;
   selectedProjectId: string;
   selectedGoalId: string;
   selectedTaskId: string;
-  selectedJournalDate: string;
 };
 
 function locationsMatch(left: NavigationLocation, right: NavigationLocation) {
@@ -254,8 +192,7 @@ function locationsMatch(left: NavigationLocation, right: NavigationLocation) {
     left.view === right.view &&
     left.selectedProjectId === right.selectedProjectId &&
     left.selectedGoalId === right.selectedGoalId &&
-    left.selectedTaskId === right.selectedTaskId &&
-    left.selectedJournalDate === right.selectedJournalDate
+    left.selectedTaskId === right.selectedTaskId
   );
 }
 
@@ -290,7 +227,6 @@ export function LiraShell() {
   const [pendingVaultPath, setPendingVaultPath] = useState(vaultPath);
   const [vaultError, setVaultError] = useState("");
   const [loadedItemVaultPath, setLoadedItemVaultPath] = useState("");
-  const [loadedJournalVaultPath, setLoadedJournalVaultPath] = useState("");
   const [loadedProjectVaultPath, setLoadedProjectVaultPath] = useState("");
   const [, setLoadedProfileVaultPath] = useState("");
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
@@ -301,16 +237,6 @@ export function LiraShell() {
   const todayDate = getTodayDateString();
   const [items, setItems] = useState<Item[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [journalSummaries, setJournalSummaries] = useState<JournalEntrySummary[]>(() =>
-    createDefaultJournalSummaries(todayDate),
-  );
-  const [selectedJournalDate, setSelectedJournalDate] = useState(todayDate);
-  const [journalEntry, setJournalEntry] = useState<JournalEntry>(() =>
-    createDefaultJournalEntry(todayDate),
-  );
-  const [todayJournalEntry, setTodayJournalEntry] = useState<JournalEntry>(() =>
-    createDefaultJournalEntry(todayDate),
-  );
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedGoalId, setSelectedGoalId] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState("");
@@ -333,7 +259,6 @@ export function LiraShell() {
       selectedProjectId: "",
       selectedGoalId: "",
       selectedTaskId: "",
-      selectedJournalDate: todayDate,
     },
   ]);
   const pageHistoryIndexRef = useRef(0);
@@ -997,94 +922,11 @@ export function LiraShell() {
     void mutateItems((current) => attachProjectIdsFromNames(current, projects));
   }, [projects]);
 
-  useEffect(() => {
-    let cancelled = false;
 
-    if (!vaultPath) {
-      setJournalEntry(createDefaultJournalEntry(selectedJournalDate));
-      setTodayJournalEntry(createDefaultJournalEntry(todayDate));
-      setLoadedJournalVaultPath("");
-      setJournalSummaries(createDefaultJournalSummaries(todayDate));
-      return;
-    }
 
-    void loadJournalEntry(vaultPath, selectedJournalDate)
-      .then((loadedEntry) => {
-        if (cancelled) {
-          return;
-        }
 
-        setJournalEntry(loadedEntry ?? createDefaultJournalEntry(selectedJournalDate));
-        setLoadedJournalVaultPath(vaultPath);
-      })
-      .catch(() => {
-        if (cancelled) {
-          return;
-        }
 
-        setJournalEntry(createDefaultJournalEntry(selectedJournalDate));
-        setLoadedJournalVaultPath(vaultPath);
-      });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedJournalDate, vaultPath]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!vaultPath) {
-      setTodayJournalEntry(createDefaultJournalEntry(todayDate));
-      return;
-    }
-
-    if (selectedJournalDate === todayDate) {
-      setTodayJournalEntry(journalEntry);
-      return;
-    }
-
-    void loadJournalEntry(vaultPath, todayDate)
-      .then((loadedEntry) => {
-        if (!cancelled) {
-          setTodayJournalEntry(loadedEntry ?? createDefaultJournalEntry(todayDate));
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setTodayJournalEntry(createDefaultJournalEntry(todayDate));
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [journalEntry, selectedJournalDate, todayDate, vaultPath]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!vaultPath) {
-      setJournalSummaries(createDefaultJournalSummaries(todayDate));
-      return;
-    }
-
-    void listJournalEntries(vaultPath)
-      .then((summaries) => {
-        if (!cancelled) {
-          setJournalSummaries(summaries);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setJournalSummaries([]);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [todayDate, vaultPath]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1118,20 +960,7 @@ export function LiraShell() {
     };
   }, [vaultPath]);
 
-  useEffect(() => {
-    if (!vaultPath || loadedJournalVaultPath !== vaultPath) {
-      return;
-    }
 
-    void saveJournalEntry(vaultPath, journalEntry)
-      .then(() => listJournalEntries(vaultPath))
-      .then((summaries) => {
-        setJournalSummaries(summaries);
-      })
-      .catch((error) => {
-        setToastMessage(formatPersistenceError("save journal entry", error));
-      });
-  }, [journalEntry, loadedJournalVaultPath, vaultPath]);
 
   function buildNavigationLocation(
     overrides: Partial<NavigationLocation> = {},
@@ -1141,7 +970,6 @@ export function LiraShell() {
       selectedProjectId,
       selectedGoalId,
       selectedTaskId,
-      selectedJournalDate,
       ...overrides,
     };
   }
@@ -1151,7 +979,6 @@ export function LiraShell() {
     setSelectedProjectId(location.selectedProjectId);
     setSelectedGoalId(location.selectedGoalId);
     setSelectedTaskId(location.selectedTaskId);
-    setSelectedJournalDate(location.selectedJournalDate);
   }
 
   function navigateToLocation(
@@ -1794,15 +1621,7 @@ export function LiraShell() {
     );
   }
 
-  function handleUpdateJournalEntry(updates: Partial<JournalEntry>) {
-    const updatedAt = new Date().toISOString();
 
-    setJournalEntry((current) => {
-      const nextEntry = applyJournalEntryUpdates(current, updates, updatedAt);
-      setJournalSummaries((currentSummaries) => upsertJournalSummary(currentSummaries, nextEntry));
-      return nextEntry;
-    });
-  }
 
   function handleConvertCaptureToTask(itemId: string, projectId?: string) {
     const timestamp = getCurrentTimestamp();
@@ -2079,10 +1898,6 @@ export function LiraShell() {
               activeView={activeView}
               items={items}
               todayDate={todayDate}
-              journalSummaries={journalSummaries}
-              selectedJournalDate={selectedJournalDate}
-              journalEntry={journalEntry}
-              todayJournalEntry={todayJournalEntry}
               projects={projects}
               selectedProjectId={selectedProjectId}
               selectedGoalId={selectedGoalId}
@@ -2098,8 +1913,6 @@ export function LiraShell() {
               onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteItem}
               onUpdateProject={handleUpdateProject}
-              onUpdateJournalEntry={handleUpdateJournalEntry}
-              onSelectJournalDate={setSelectedJournalDate}
               onCreateCapture={handleCaptureThought}
               onConvertCaptureToTask={handleConvertCaptureToTask}
               onConvertCaptureToGoal={handleConvertCaptureToGoal}

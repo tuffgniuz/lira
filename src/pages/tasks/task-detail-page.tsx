@@ -73,12 +73,9 @@ const taskDescriptionExtensions = [
 export function TaskDetailPage({
   task,
   projects,
-  onBack,
   onUpdateTask,
   onDeleteTask,
   onNotify,
-  eyebrow = "Tasks",
-  backLabel = "Back to tasks",
 }: TaskDetailPageProps) {
   const [pendingDeleteTask, setPendingDeleteTask] = useState<{
     id: string;
@@ -87,7 +84,7 @@ export function TaskDetailPage({
   const projectName = getProjectName(projects, task.projectId, task.project) || "None";
   const projectTemplateFields =
     projects.find((project) => project.id === task.projectId)?.taskTemplate?.fields ?? [];
-  const { commitDraft, draftContent, setDraftContent } = useDebouncedTaskDraft({
+  const { draftContent, setDraftContent } = useDebouncedTaskDraft({
     taskId: task.id,
     initialContent: task.content,
     onCommit: (content) => onUpdateTask(task.id, { content }),

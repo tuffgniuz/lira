@@ -141,7 +141,7 @@ describe("TaskDetailPage", () => {
   it("renders a centered full-page task detail layout and updates task content", () => {
     vi.useFakeTimers();
 
-    const { onBack, onUpdateTask } = renderTaskDetailPage();
+    const { onUpdateTask } = renderTaskDetailPage();
 
     try {
       const heading = screen.getByRole("heading", { name: "Build task detail page" });
@@ -327,6 +327,7 @@ describe("TaskDetailPage", () => {
         onBack={onBack}
         onUpdateTask={onUpdateTask}
         onDeleteTask={onDeleteTask}
+        onNotify={vi.fn()}
       />,
     );
 
@@ -342,6 +343,7 @@ describe("TaskDetailPage", () => {
         onBack={onBack}
         onUpdateTask={onUpdateTask}
         onDeleteTask={onDeleteTask}
+        onNotify={vi.fn()}
       />,
     );
 

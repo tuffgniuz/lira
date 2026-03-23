@@ -153,6 +153,7 @@ describe("TasksPage", () => {
         projects={[] as Project[]}
         onSelectTask={onSelectTask}
         onDeleteTask={vi.fn()}
+        onNotify={vi.fn()}
       />,
     );
 

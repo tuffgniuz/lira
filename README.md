@@ -26,6 +26,9 @@ Lira is an opinionated, keyboard-first, local-first desktop system for independe
 - Leader sequences
   - `Space g t p` opens the `Go To Page` palette
   - `Space l p` opens the `Projects` palette
+  - `Space l t` opens the `Tasks` palette
+  - `Space l g` opens the `Goals` palette
+  - `Space l i` opens the `Inbox` palette
   - `Space n i` opens quick capture
   - `Space n g` opens `New Goal`
   - `Space n t` opens `New Task`
@@ -48,6 +51,14 @@ Lira is an opinionated, keyboard-first, local-first desktop system for independe
   - `Esc` closes the page when the editor is in normal mode
   - `Shift+H` / `Shift+L` works in normal mode for history navigation
 
+- Projects page (List View)
+  - `n` creates a new task
+  - `x` toggles the completion status of the highlighted task
+  - `d` (when pressed twice) deletes the highlighted task
+  - `1` filters the list to show "To do" tasks
+  - `2` filters the list to show "Completed" tasks
+  - `3` filters the list to show "All" tasks
+
 - Projects board
   - `h` / `ArrowLeft` focuses the previous lane
   - `l` / `ArrowRight` focuses the next lane
@@ -56,11 +67,8 @@ Lira is an opinionated, keyboard-first, local-first desktop system for independe
   - `k` moves to the previous task inside the focused lane
   - `n` creates a new task in the focused lane
   - `Enter` opens the focused task
-
-- Journaling
-  - `j` moves to the next day in the day list when you are not typing
-  - `k` moves to the previous day in the day list when you are not typing
-  - `Enter` re-selects the focused day from the journal day list
+  - `Shift + H` moves the selected task card to the lane on the left
+  - `Shift + L` moves the selected task card to the lane on the right
 
 - Modal submit behavior
   - `Enter` submits `New Task`, `New Goal`, and `New Project` from single-line inputs and selects

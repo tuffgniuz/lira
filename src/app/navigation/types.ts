@@ -5,8 +5,7 @@ export type ViewId =
   | "inbox"
   | "goals"
   | "tasks"
-  | "projects"
-  | "journaling";
+  | "projects";
 
 export type NavItem = {
   id: Exclude<ViewId, "dashboard">;

@@ -15,7 +15,6 @@ import { formatRelativeTimestamp } from "@/lib/utils/format-relative-timestamp";
 import { createProjectBoardLaneId, defaultProjectBoardLanes } from "@/models/project-board";
 import type { ProjectBoardLane } from "@/models/project-board";
 import type { Item } from "@/models/workspace-item";
-import type { JournalEntrySummary } from "@/models/journal";
 import type {
   Project,
   ProjectTaskTemplateField,
@@ -25,7 +24,6 @@ import type {
 type ProjectsPageProps = {
   projects: Project[];
   items: Item[];
-  journalSummaries: JournalEntrySummary[];
   todayDate: string;
   selectedProjectId: string;
   onUpdateProject: (projectId: string, updates: Partial<Project>) => void;
@@ -107,7 +105,6 @@ function formatPriorityLabel(priority: Item["priority"]) {
 export function ProjectsPage({
   projects,
   items,
-  journalSummaries,
   todayDate,
   selectedProjectId,
   onUpdateProject,
@@ -1210,7 +1207,6 @@ export function ProjectsPage({
           right={
             <RightRailColumn
               items={items}
-              journalSummaries={journalSummaries}
               todayDate={todayDate}
             />
           }
@@ -1406,7 +1402,6 @@ export function ProjectsPage({
         right={
           <RightRailColumn
             items={items}
-            journalSummaries={journalSummaries}
             todayDate={todayDate}
           />
         }

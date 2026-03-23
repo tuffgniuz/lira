@@ -84,7 +84,7 @@ export function NewGoalModal({
       setGoalSentence(initialGoal.title);
       setProjectIdOverride(initialGoal.projectId);
       setPeriodOverride(initialGoal.period);
-      setTrackingOverride(resolveInitialTracking(initialGoal));
+      setTrackingOverride(resolveInitialTracking({ ...initialGoal, milestones: initialGoal.milestones ?? [] }));
       setTargetOverride(initialGoal.metric === "tasks_completed" ? String(initialGoal.target) : "");
       setScheduleDaysOverride(initialGoal.scheduleDays ?? []);
       setMilestoneDrafts(
@@ -394,7 +394,7 @@ function resolveTracking(
   inferredMetric: GoalMetric | undefined,
   period: GoalPeriod,
 ): GoalTrackingChoice {
-  const baseTracking = trackingOverride ?? resolveInitialTracking(initialGoal, inferredMetric);
+  const baseTracking = trackingOverride ?? resolveInitialTracking({ ...initialGoal, milestones: initialGoal?.milestones ?? [] }, inferredMetric);
 
   if (period === "daily" && baseTracking === "milestones") {
     return "direct";
@@ -407,7 +407,7 @@ function resolveInitialTracking(
   initialGoal?: Pick<GoalDraftSubmit, "metric" | "milestones">,
   inferredMetric?: GoalMetric,
 ): GoalTrackingChoice {
-  if (initialGoal?.milestones?.length) {
+  if ((initialGoal?.milestones ?? []).length > 0) {
     return "milestones";
   }
 

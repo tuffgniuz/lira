@@ -1,17 +1,14 @@
 import type { Item } from "@/models/workspace-item";
-import type { JournalEntrySummary } from "@/models/journal";
 import { buildRightRailContext } from "@/lib/domain/right-rail-context";
 
 export function RightRailColumn({
   items,
-  journalSummaries,
   todayDate,
 }: {
   items: Item[];
-  journalSummaries: JournalEntrySummary[];
   todayDate: string;
 }) {
-  const context = buildRightRailContext(items, journalSummaries, todayDate);
+  const context = buildRightRailContext(items, todayDate);
 
   return (
     <div className="right-rail">

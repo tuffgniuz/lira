@@ -1,5 +1,4 @@
 import type { Item } from "@/models/workspace-item";
-import type { JournalEntrySummary } from "@/models/journal";
 import {
   formatGoalMetricLabel,
   getCurrentGoalWeekDays,
@@ -35,7 +34,6 @@ export type RightRailContext = {
 
 export function buildRightRailContext(
   items: Item[],
-  journalSummaries: JournalEntrySummary[],
   todayDate: string,
 ): RightRailContext {
   const remainingTasksForToday = items.filter(
@@ -51,7 +49,6 @@ export function buildRightRailContext(
     .map((goal) => {
       const progress = resolveGoalProgress(goal, {
         items,
-        journalSummaries,
         todayDate,
       });
       const metricLabel = formatGoalMetricLabel(goal);
@@ -64,7 +61,6 @@ export function buildRightRailContext(
           goal,
           {
             items,
-            journalSummaries,
             todayDate,
           },
           day.date,

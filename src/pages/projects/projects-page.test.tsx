@@ -1,8 +1,7 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectsPage } from "./projects-page";
 import type { Item } from "@/models/workspace-item";
-import type { JournalEntrySummary } from "@/models/journal";
 import type { Project } from "@/models/project";
 
 function createProject(overrides: Partial<Project> = {}): Project {
@@ -55,12 +54,10 @@ function createTask(overrides: Partial<Item> = {}): Item {
 function renderProjectsPage({
   projects = [createProject()],
   items = [],
-  journalSummaries = [],
   todayDate = "2026-03-20",
 }: {
   projects?: Project[];
   items?: Item[];
-  journalSummaries?: JournalEntrySummary[];
   todayDate?: string;
 } = {}) {
   const onUpdateProject = vi.fn();
@@ -74,7 +71,6 @@ function renderProjectsPage({
     <ProjectsPage
       projects={projects}
       items={items}
-      journalSummaries={journalSummaries}
       todayDate={todayDate}
       selectedProjectId="project-1"
       onUpdateProject={onUpdateProject}
