@@ -2,8 +2,6 @@ use crate::persistence::database::Database;
 use crate::persistence::models::{Task, TaskLifecycleStatus, TaskQuery, TaskScheduleBucket};
 use crate::persistence::support::{decode_enum, encode_enum, option_string, to_sql_error};
 use rusqlite::params;
-
-#[cfg(test)]
 use rusqlite::OptionalExtension;
 
 pub struct TaskRepository<'a> {
@@ -50,7 +48,8 @@ impl<'a> TaskRepository<'a> {
     }
 
     pub fn update(&self, task: Task) -> Result<(), String> {
-        self.db
+        let rows_updated = self
+            .db
             .connection()
             .execute(
                 "
@@ -71,6 +70,7 @@ impl<'a> TaskRepository<'a> {
                     created_at = ?15,
                     updated_at = ?16
                 WHERE id = ?1
+                  AND updated_at <= ?16
                 ",
                 params![
                     task.id,
@@ -91,8 +91,30 @@ impl<'a> TaskRepository<'a> {
                     task.updated_at
                 ],
             )
-            .map(|_| ())
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string())?;
+
+        if rows_updated > 0 {
+            return Ok(());
+        }
+
+        let current_updated_at = self
+            .db
+            .connection()
+            .query_row(
+                "SELECT updated_at FROM tasks WHERE id = ?1",
+                params![task.id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+
+        match current_updated_at {
+            Some(existing_updated_at) if existing_updated_at > task.updated_at => {
+                Err("task update rejected because a newer version already exists".into())
+            }
+            Some(_) => Err("task update failed without applying changes".into()),
+            None => Err("task not found".into()),
+        }
     }
 
     #[cfg(test)]

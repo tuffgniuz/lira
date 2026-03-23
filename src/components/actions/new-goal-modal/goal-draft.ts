@@ -25,9 +25,9 @@ export const goalSuggestions: GoalSuggestion[] = [
     sentence: "Complete 3 tasks daily",
   },
   {
-    id: "journal-daily",
-    label: "Write journal daily",
-    sentence: "Write a journal entry every day",
+    id: "review-goals-daily",
+    label: "Review goals daily",
+    sentence: "Review goals every day",
   },
   {
     id: "process-inbox",

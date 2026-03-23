@@ -240,6 +240,7 @@ export function LiraShell() {
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedGoalId, setSelectedGoalId] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [taskDraftResetKeys, setTaskDraftResetKeys] = useState<Record<string, number>>({});
   const [toastMessage, setToastMessage] = useState("");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [listPaletteKind, setListPaletteKind] = useState<ListPaletteKind | null>(null);
@@ -253,6 +254,7 @@ export function LiraShell() {
   const keySequenceTimeoutRef = useRef<number | null>(null);
   const itemMutationVersionRef = useRef(0);
   const projectMutationVersionRef = useRef(0);
+  const taskSaveRequestVersionRef = useRef(new Map<string, number>());
   const pageHistoryRef = useRef<NavigationLocation[]>([
     {
       view: "dashboard",
@@ -566,18 +568,6 @@ export function LiraShell() {
       ) {
         event.preventDefault();
         setSelectedGoalId("");
-        clearKeySequence();
-        return;
-      }
-
-      if (
-        event.key === "Escape" &&
-        (activeView === "tasks" || activeView === "projects") &&
-        selectedTaskId &&
-        !typingTarget
-      ) {
-        event.preventDefault();
-        closeTaskDetailInView(activeView);
         clearKeySequence();
         return;
       }
@@ -1562,8 +1552,31 @@ export function LiraShell() {
   }
 
   function handleUpdateTask(taskId: string, updates: Partial<Item>) {
+    if (!vaultPath || loadedItemVaultPath !== vaultPath) {
+      setToastMessage("Failed to save workspace changes: vault is not ready");
+      return;
+    }
+
+    const previousTask = items.find(
+      (item): item is Item => item.id === taskId && item.kind === "task",
+    );
+
+    if (!previousTask) {
+      return;
+    }
+
     const timestamp = getCurrentTimestamp();
-    let nextTask: Item | null = null;
+    const nextTask: Item = {
+      ...previousTask,
+      ...updates,
+      completedAt:
+        updates.isCompleted === true
+          ? todayDate
+          : updates.isCompleted === false
+            ? ""
+            : previousTask.completedAt,
+      updatedAt: timestamp,
+    };
 
     setItems((current) =>
       current.map((item) => {
@@ -1571,32 +1584,30 @@ export function LiraShell() {
           return item;
         }
 
-        nextTask = {
-          ...item,
-          ...updates,
-          completedAt:
-            updates.isCompleted === true
-              ? todayDate
-              : updates.isCompleted === false
-                ? ""
-                : item.completedAt,
-          updatedAt: timestamp,
-        };
-
         return nextTask;
       }),
     );
 
-    if (!nextTask) {
-      return;
-    }
-
-    if (!vaultPath || loadedItemVaultPath !== vaultPath) {
-      setToastMessage("Failed to save workspace changes: vault is not ready");
-      return;
-    }
+    const requestVersion = (taskSaveRequestVersionRef.current.get(taskId) ?? 0) + 1;
+    taskSaveRequestVersionRef.current.set(taskId, requestVersion);
 
     void persistTaskUpdate(vaultPath, taskPayloadFromWorkspaceItem(nextTask)).catch((error) => {
+      if (taskSaveRequestVersionRef.current.get(taskId) !== requestVersion) {
+        return;
+      }
+
+      setItems((current) =>
+        current.map((item) =>
+          item.id === taskId && item.kind === "task"
+            ? previousTask
+            : item,
+        ),
+      );
+      setTaskDraftResetKeys((current) => ({
+        ...current,
+        [taskId]: (current[taskId] ?? 0) + 1,
+      }));
+
       setToastMessage(formatPersistenceError("save task", error));
     });
   }
@@ -1919,6 +1930,7 @@ export function LiraShell() {
               onUpdateCaptureState={handleUpdateCaptureState}
               onDeleteCapture={handleDeleteItem}
               onNotify={setToastMessage}
+              taskDraftResetKeys={taskDraftResetKeys}
             />
           </div>
         </main>

@@ -15,9 +15,6 @@ const mocks = vi.hoisted(() => ({
   updateTask: vi.fn(),
   loadProjects: vi.fn(),
   saveProjects: vi.fn(),
-  listJournalEntries: vi.fn(),
-  loadJournalEntry: vi.fn(),
-  saveJournalEntry: vi.fn(),
   loadProfile: vi.fn(),
   saveProfile: vi.fn(),
 }));
@@ -42,12 +39,6 @@ vi.mock("@/services/tasks", () => ({
 vi.mock("@/services/projects", () => ({
   loadProjects: mocks.loadProjects,
   saveProjects: mocks.saveProjects,
-}));
-
-vi.mock("@/services/journal", () => ({
-  listJournalEntries: mocks.listJournalEntries,
-  loadJournalEntry: mocks.loadJournalEntry,
-  saveJournalEntry: mocks.saveJournalEntry,
 }));
 
 vi.mock("@/services/profile", () => ({
@@ -191,9 +182,6 @@ describe("LiraShell list shortcuts", () => {
     mocks.updateTask.mockResolvedValue(undefined);
     mocks.loadProjects.mockResolvedValue(projects);
     mocks.saveProjects.mockResolvedValue(undefined);
-    mocks.listJournalEntries.mockResolvedValue([]);
-    mocks.loadJournalEntry.mockResolvedValue(null);
-    mocks.saveJournalEntry.mockResolvedValue(undefined);
     mocks.loadProfile.mockResolvedValue({
       name: "User",
       profilePicture: "",
@@ -883,7 +871,7 @@ describe("LiraShell list shortcuts", () => {
     editorSurface.remove();
   });
 
-  it("lets Escape close task detail from a vim editor in normal mode", async () => {
+  it("keeps task detail open when Escape is pressed from a vim editor in normal mode", async () => {
     renderShell();
 
     await waitFor(() => {
@@ -901,9 +889,8 @@ describe("LiraShell list shortcuts", () => {
 
     fireEvent.keyDown(editorSurface, { key: "Escape" });
 
-    await waitFor(() => {
-      expect(screen.getByRole("columnheader", { name: "Task" })).toBeInTheDocument();
-    });
+    expect(screen.getByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Task" })).not.toBeInTheDocument();
 
     editorSurface.remove();
   });
@@ -942,6 +929,41 @@ describe("LiraShell list shortcuts", () => {
         }),
       );
       expect(mocks.replaceWorkspaceItems).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reverts task description edits when the task service save fails", async () => {
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add list task shortcut" }));
+    expect(await screen.findByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
+
+    mocks.updateTask.mockRejectedValueOnce(new Error("sqlite busy"));
+    vi.useFakeTimers();
+
+    try {
+      const editor = screen.getByRole("textbox", { name: "Task description" });
+      fireEvent.change(editor, { target: { value: "AB" } });
+
+      expect(editor).toHaveValue("AB");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+
+      vi.useRealTimers();
+
+      await waitFor(() => {
+        expect(screen.getByRole("textbox", { name: "Task description" })).toHaveValue("");
+      });
+      expect(screen.getByRole("status")).toHaveTextContent("Failed to save task: sqlite busy");
     } finally {
       vi.useRealTimers();
     }

@@ -1,7 +1,6 @@
 use crate::commands::vault::resolve_vault_path;
 use crate::application::vault::open_database;
 use crate::persistence::repositories::task_repository::TaskRepository;
-use crate::transport::journal::JournalEntryDto;
 use crate::transport::workspace::WorkspaceItemDto;
 use tempfile::tempdir;
 
@@ -41,21 +40,7 @@ fn exposes_refactored_backend_modules_for_commands_and_transport_types() {
         goal_scope: None,
     };
 
-    let journal_entry = JournalEntryDto {
-        id: "journal-1".into(),
-        date: "2026-03-22".into(),
-        morning_intention: String::new(),
-        diary_entry: String::new(),
-        reflection_entry: String::new(),
-        focuses: Vec::new(),
-        commitments: Vec::new(),
-        reflection: crate::transport::journal::JournalReflectionDto::default(),
-        created_at: "2026-03-22T00:00:00Z".into(),
-        updated_at: "2026-03-22T00:00:00Z".into(),
-    };
-
     assert_eq!(workspace_item.kind, "capture");
-    assert_eq!(journal_entry.date, "2026-03-22");
     let repository_type_name = std::any::type_name::<TaskRepository<'static>>();
     assert!(repository_type_name.contains("TaskRepository"));
 }

@@ -46,7 +46,8 @@ export function useTaskDetailNavigation() {
       const activeElement = document.activeElement as HTMLElement | null;
 
       if (activeElement?.closest(".cm-editor")) {
-        const isVimInsertMode = document.querySelector(".cm-fat-cursor") === null;
+        const activeEditor = activeElement.closest<HTMLElement>(".cm-editor");
+        const isVimInsertMode = activeEditor?.dataset.vimMode !== "normal";
 
         if (isVimInsertMode) {
           return;

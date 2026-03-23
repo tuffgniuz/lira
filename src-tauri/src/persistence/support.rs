@@ -20,10 +20,6 @@ pub fn option_string(row: &Row<'_>, index: usize) -> rusqlite::Result<Option<Str
     row.get(index)
 }
 
-pub fn preview(value: Option<String>) -> String {
-    value.unwrap_or_default().chars().take(84).collect()
-}
-
 pub fn to_sql_error(message: String) -> rusqlite::Error {
     rusqlite::Error::FromSqlConversionFailure(
         0,

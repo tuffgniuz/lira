@@ -46,6 +46,7 @@ type PageContentProps = {
   ) => void;
   onDeleteCapture: (captureId: string) => void;
   onNotify: (message: string) => void;
+  taskDraftResetKeys: Record<string, number>;
 };
 
 export function PageContent({
@@ -73,6 +74,7 @@ export function PageContent({
   onUpdateCaptureState,
   onDeleteCapture,
   onNotify,
+  taskDraftResetKeys,
 }: PageContentProps) {
   if (activeView === "dashboard") {
     return (
@@ -129,6 +131,7 @@ export function PageContent({
             onUpdateTask={onUpdateTask}
             onDeleteTask={onDeleteTask}
             onNotify={onNotify}
+            draftResetKey={taskDraftResetKeys[selectedTask.id] ?? 0}
           />
         ) : (
           <TasksPage
@@ -167,6 +170,7 @@ export function PageContent({
             onUpdateTask={onUpdateTask}
             onDeleteTask={onDeleteTask}
             onNotify={onNotify}
+            draftResetKey={taskDraftResetKeys[selectedTask.id] ?? 0}
           />
         ) : (
           <ProjectsPage

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import type { Item } from "@/models/workspace-item";
@@ -14,6 +14,20 @@ const vimMocks = vi.hoisted(() => ({
   editorDom: document.createElement("div"),
   delayEditorCreation: false,
   vim: vi.fn(() => ({ name: "vim-extension" })),
+  currentInsertMode: false,
+  currentMode: "normal" as "insert" | "normal" | "visual",
+  modeChangeListener: null as null | ((event: { mode?: string }) => void),
+  lastCodeMirrorProps: null as null | {
+    basicSetup?: {
+      lineNumbers?: boolean;
+      foldGutter?: boolean;
+      dropCursor?: boolean;
+      allowMultipleSelections?: boolean;
+      highlightActiveLine?: boolean;
+      highlightActiveLineGutter?: boolean;
+      closeBrackets?: boolean;
+    };
+  },
 }));
 
 vi.mock("@uiw/react-codemirror", () => ({
@@ -22,7 +36,20 @@ vi.mock("@uiw/react-codemirror", () => ({
     onChange: (value: string) => void;
     "aria-label": string;
     onCreateEditor?: (view: { focus: () => void; dom: HTMLElement }) => void;
+    basicSetup?: {
+      lineNumbers?: boolean;
+      foldGutter?: boolean;
+      dropCursor?: boolean;
+      allowMultipleSelections?: boolean;
+      highlightActiveLine?: boolean;
+      highlightActiveLineGutter?: boolean;
+      closeBrackets?: boolean;
+    };
   }) => {
+    vimMocks.lastCodeMirrorProps = {
+      basicSetup: props.basicSetup,
+    };
+
     React.useEffect(() => {
       const view = {
         focus: vimMocks.editorFocus,
@@ -38,7 +65,7 @@ vi.mock("@uiw/react-codemirror", () => ({
       }
 
       props.onCreateEditor?.(view);
-    }, [props]);
+    }, []);
 
     return (
       <textarea
@@ -57,9 +84,17 @@ vi.mock("@replit/codemirror-vim", () => ({
     handleKey: vimMocks.handleKey,
   },
   getCM: vi.fn(() => ({
-    state: { vim: { insertMode: false } },
-    on: vi.fn(),
-    off: vi.fn(),
+    state: { vim: { insertMode: vimMocks.currentInsertMode } },
+    on: vi.fn((eventName: string, listener: (event: { mode?: string }) => void) => {
+      if (eventName === "vim-mode-change") {
+        vimMocks.modeChangeListener = listener;
+      }
+    }),
+    off: vi.fn((eventName: string, listener: (event: { mode?: string }) => void) => {
+      if (eventName === "vim-mode-change" && vimMocks.modeChangeListener === listener) {
+        vimMocks.modeChangeListener = null;
+      }
+    }),
   })),
   vim: vimMocks.vim,
 }));
@@ -136,18 +171,24 @@ describe("TaskDetailPage", () => {
     vi.clearAllMocks();
     vimMocks.editorDom = document.createElement("div");
     vimMocks.delayEditorCreation = false;
+    vimMocks.currentInsertMode = false;
+    vimMocks.currentMode = "normal";
+    vimMocks.modeChangeListener = null;
+    vimMocks.lastCodeMirrorProps = null;
   });
 
   it("renders a centered full-page task detail layout and updates task content", () => {
     vi.useFakeTimers();
 
+    vi.setSystemTime(new Date("2026-03-22T12:00:00.000Z"));
     const { onUpdateTask } = renderTaskDetailPage();
 
     try {
       const heading = screen.getByRole("heading", { name: "Build task detail page" });
       expect(heading).toBeInTheDocument();
       expect(heading.closest(".task-detail-page__content")).not.toBeNull();
-      expect(screen.getByText("Open • Lira • CREATED YESTERDAY")).toBeInTheDocument();
+      expect(screen.getByText("Open • Lira")).toBeInTheDocument();
+      expect(screen.queryByText(/created|updated/i)).not.toBeInTheDocument();
 
       fireEvent.change(screen.getByRole("textbox", { name: "Task description" }), {
         target: { value: "Ship the dedicated detail page." },
@@ -170,6 +211,43 @@ describe("TaskDetailPage", () => {
     expect(screen.getByRole("textbox", { name: "Task description" })).toBeInTheDocument();
     expect(vimMocks.defineEx).not.toHaveBeenCalled();
     expect(vimMocks.map).not.toHaveBeenCalled();
+  });
+
+  it("disables automatic bracket closing in the task description editor", () => {
+    renderTaskDetailPage();
+
+    expect(vimMocks.lastCodeMirrorProps?.basicSetup?.closeBrackets).toBe(false);
+  });
+
+  it("renders a minimal editor status bar with mode and live counts", () => {
+    renderTaskDetailPage({
+      task: createTask({
+        content: "Hello world",
+      }),
+    });
+
+    expect(screen.getByText("INSERT")).toBeInTheDocument();
+    expect(screen.getByText("2W 11C")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Task description" }), {
+      target: { value: "Hello world again" },
+    });
+
+    expect(screen.getByText("3W 17C")).toBeInTheDocument();
+  });
+
+  it("updates the editor status bar when vim mode changes", () => {
+    renderTaskDetailPage();
+
+    act(() => {
+      vimMocks.modeChangeListener?.({ mode: "visual" });
+    });
+    expect(screen.getByText("VISUAL")).toBeInTheDocument();
+
+    act(() => {
+      vimMocks.modeChangeListener?.({ mode: "normal" });
+    });
+    expect(screen.getByText("NORMAL")).toBeInTheDocument();
   });
 
   it("focuses the editor and enters vim insert mode when the page opens", () => {

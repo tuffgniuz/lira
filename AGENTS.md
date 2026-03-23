@@ -6,7 +6,6 @@ The app is designed around distinct but connected domains such as:
 - captures / inbox
 - tasks
 - goals
-- journal entries
 - projects
 - tags
 - relationships
@@ -50,8 +49,6 @@ Persistence should use first-class entities with clear boundaries, such as:
 - Task
 - Goal
 - GoalProgressEntry
-- JournalEntry
-- JournalCommitment
 - Project
 - Tag
 - Relationship
@@ -312,7 +309,7 @@ Prefer tests for:
 - creating a task
 - creating a goal
 - processing a capture
-- journal behavior
+- project board behavior
 - filtering and rendering important states
 
 Do not over-focus on styling tests.

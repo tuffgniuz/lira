@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-Lira is a local-first, keyboard-driven desktop productivity and knowledge tool built with **Tauri** and **React**. Its purpose is to help users capture thoughts quickly, manage tasks, organize project work, write and connect markdown notes, reflect through journaling, define measurable goals, and navigate everything through a shared tagging and linking system.
+Lira is a local-first, keyboard-driven desktop productivity and knowledge tool built with **Tauri** and **React**. Its purpose is to help users capture thoughts quickly, manage tasks, organize project work, write and connect markdown notes, review progress, define measurable goals, and navigate everything through a shared tagging and linking system.
 
 Lira is designed first for users who think and work through the keyboard, especially those familiar with Vim-like workflows. It should feel fast, structured, extensible, and personal. It is not meant to be a bloated workspace platform or a team collaboration tool. It is a focused personal operating system for thought and execution.
 
@@ -17,12 +17,12 @@ Lira should combine these ideas into one coherent workflow:
 * capture quickly
 * organize clearly
 * execute intentionally
-* reflect consistently
+* review consistently
 * extend freely
 
 The app should support the full loop:
 
-**Capture → Process → Work → Track → Reflect**
+**Capture → Process → Work → Track → Review**
 
 Example flow:
 
@@ -30,7 +30,7 @@ Example flow:
 * That inbox item becomes a task or note
 * A task may belong to a project
 * A goal may track related tasks
-* A journal entry may reflect on progress
+* A goal may summarize progress across related tasks
 * Notes, tasks, goals, projects, and inbox items can all be connected through tags and links
 
 Lira should feel like a keyboard-first hybrid of:
@@ -38,7 +38,7 @@ Lira should feel like a keyboard-first hybrid of:
 * markdown notes
 * task management
 * personal project planning
-* reflective journaling
+* structured review
 * lightweight goal tracking
 
 ---
@@ -55,7 +55,7 @@ All important workflows must be possible without touching the mouse. The mouse m
 
 ### 3.3 Markdown-native
 
-Notes and journal content should use markdown as the primary content format. Tasks may also exist inside markdown contexts or as structured data that can be rendered in markdown-like ways.
+Notes should use markdown as the primary content format. Tasks may also exist inside markdown contexts or as structured data that can be rendered in markdown-like ways.
 
 ### 3.4 Plugin-based
 
@@ -88,7 +88,7 @@ Secondary audience:
 * note-takers
 * indie hackers
 * planners
-* people who value reflective journaling and structured thinking
+* people who value structured review and thoughtful planning
 
 ---
 
@@ -114,7 +114,7 @@ Initial version should prioritize local filesystem storage and lightweight local
 
 Possible storage split:
 
-* markdown files for notes and journals
+* markdown files for notes
 * JSON or SQLite for structured entities like tasks, projects, goals, tags, UI state, and plugin metadata
 
 This decision can be finalized later, but the architecture should allow both text-based content and structured relational content cleanly.
@@ -128,7 +128,6 @@ Lira will include the following product domains:
 * Notes
 * Tasks
 * Capture Inbox
-* Journaling
 * Goals
 * Projects
 * Tagging System
@@ -168,7 +167,7 @@ Provide a markdown-based knowledge base for writing, storing, linking, and searc
 
 * Notes can belong to a project optionally
 * Notes can have tags
-* Notes can link to tasks, goals, journal entries, or other notes
+* Notes can link to tasks, goals, or other notes
 * Notes may be created from inbox items
 
 ---
@@ -242,7 +241,7 @@ At minimum, inbox items can begin as generic captures. Over time they may be pro
 * task
 * note
 * project idea
-* journal seed
+* goal idea
 * archived/discarded item
 
 ### Capture workflow
@@ -261,42 +260,7 @@ At minimum, inbox items can begin as generic captures. Over time they may be pro
 
 ---
 
-## 7.4 Journaling
-
-### Purpose
-
-Support personal reflection through markdown journaling with optional AI assistance.
-
-### Requirements
-
-* Create journal entries
-* Journal entries stored locally
-* Markdown support
-* Entries organized chronologically
-* Journal entries searchable
-* Tags supported
-
-### AI-powered journaling
-
-AI should assist reflection, not replace it.
-
-AI capabilities may include:
-
-* offering reflection prompts
-* summarizing entry themes
-* suggesting tags
-* extracting possible tasks
-* identifying recurring topics over time
-
-### Journal integration
-
-* Journal entries can reference notes, goals, projects, or tasks
-* Daily or periodic journaling can support goal review
-* Journal entries can include auto-context such as today’s progress summary
-
----
-
-## 7.5 Goals
+## 7.4 Goals
 
 ### Purpose
 
@@ -316,7 +280,7 @@ Goals are not just another task list. A goal measures progress against activity.
 ### Example goals
 
 * complete 3 tasks today
-* write 1 journal entry daily
+* review goals daily
 * process 5 inbox items today
 * complete 10 project tasks this week
 
@@ -332,7 +296,6 @@ Goals are not just another task list. A goal measures progress against activity.
 
 * tasks completed
 * inbox items processed
-* journal entries written
 * notes created
 * tasks completed with a specific tag
 * tasks completed in a specific project
@@ -350,7 +313,7 @@ Goals should remain lightweight and progress-focused. No complex analytics dashb
 
 ---
 
-## 7.6 Projects
+## 7.5 Projects
 
 ### Purpose
 
@@ -394,7 +357,7 @@ Projects should remain lightweight. Lira should not become an enterprise PM tool
 
 ---
 
-## 7.7 Tagging System
+## 7.6 Tagging System
 
 ### Purpose
 
@@ -407,8 +370,6 @@ Provide a shared organizational layer across all major entities.
 * inbox items
 * goals
 * projects
-* journal entries
-
 ### Requirements
 
 * Create and assign tags
@@ -738,7 +699,7 @@ Because Lira mixes markdown content and structured productivity data, it may ben
 
 ### Candidate approach
 
-* store notes and journal entries as markdown files
+* store notes as markdown files
 * store tasks, projects, goals, tags, and UI/plugin metadata in JSON or SQLite
 * maintain references between systems via IDs
 
@@ -748,7 +709,7 @@ Use SQLite for structured storage and export/import markdown-friendly views wher
 
 ### Recommendation
 
-Do not force everything into raw markdown if it creates complexity for tasks, projects, goals, and kanban state. Markdown should remain strong where it fits best: notes and journaling.
+Do not force everything into raw markdown if it creates complexity for tasks, projects, goals, and kanban state. Markdown should remain strong where it fits best: notes.
 
 ---
 
@@ -761,7 +722,6 @@ Lira should support unified search across:
 * inbox items
 * projects
 * goals
-* journal entries
 * tags
 
 Search should later support:
@@ -783,11 +743,10 @@ AI should be additive and restrained.
 
 ### Initial AI focus
 
-* journaling assistance
-* reflection prompts
+* capture processing assistance
 * summaries
 * tag suggestions
-* task extraction from journal or inbox content
+* task extraction from inbox or note content
 
 ### Out of scope initially
 
@@ -827,7 +786,6 @@ The first usable version should focus on these areas:
 * capture inbox
 * tasks
 * projects with kanban
-* journaling
 * goals
 * tags
 * basic theme system
@@ -843,10 +801,9 @@ The first usable version should focus on these areas:
 6. tasks
 7. projects and kanban
 8. tags
-9. journaling
-10. goals
-11. theme system
-12. plugin API foundations
+9. goals
+10. theme system
+11. plugin API foundations
 
 This is the right order because it builds the platform before the surface features.
 

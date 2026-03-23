@@ -3,11 +3,13 @@ import { useEffect, useRef, useState } from "react";
 export function useDebouncedTaskDraft({
   taskId,
   initialContent,
+  syncKey,
   delayMs = 350,
   onCommit,
 }: {
   taskId: string;
   initialContent: string;
+  syncKey?: string;
   delayMs?: number;
   onCommit: (value: string) => void;
 }) {
@@ -41,7 +43,7 @@ export function useDebouncedTaskDraft({
       window.clearTimeout(debounceTimeoutRef.current);
       debounceTimeoutRef.current = null;
     }
-  }, [initialContent, taskId]);
+  }, [initialContent, syncKey, taskId]);
 
   useEffect(() => {
     if (draftContent === lastSubmittedContentRef.current) {

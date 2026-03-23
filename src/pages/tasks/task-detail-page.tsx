@@ -8,11 +8,15 @@ import { Modal } from "@/components/actions/modal";
 import { FormField } from "@/components/data-input/form-field";
 import { PageShell } from "@/components/layout/page-shell";
 import { TrashIcon } from "@/components/icons";
+import {
+  taskDescriptionCodeLanguages,
+  taskDescriptionHighlightExtensions,
+} from "@/lib/codemirror/task-description-markdown";
 import { useDebouncedTaskDraft } from "@/lib/hooks/use-debounced-task-draft";
 import { useTaskDescriptionEditor } from "@/lib/hooks/use-task-description-editor";
 import { useTaskDetailNavigation } from "@/lib/hooks/use-task-detail-navigation";
 import { getProjectName } from "@/lib/domain/project-relations";
-import { formatRelativeTimestamp } from "@/lib/utils/format-relative-timestamp";
+import { markdownConceal } from "@/lib/codemirror/markdown-conceal";
 import type { Project } from "@/models/project";
 import type { Item } from "@/models/workspace-item";
 
@@ -25,18 +29,24 @@ type TaskDetailPageProps = {
   onNotify: (message: string) => void;
   eyebrow?: string;
   backLabel?: string;
+  draftResetKey?: number;
 };
 
 const taskDescriptionExtensions = [
   vim(),
-  markdown(),
+  markdown({
+    codeLanguages: taskDescriptionCodeLanguages,
+  }),
+  ...taskDescriptionHighlightExtensions,
+  markdownConceal,
   EditorView.lineWrapping,
   EditorView.theme({
     "&": {
       backgroundColor: "transparent",
       color: "var(--color-text-primary)",
-      fontFamily: "inherit",
-      fontSize: "0.95rem",
+      fontFamily: '"Recursive Variable", "IBM Plex Sans", "Segoe UI", sans-serif',
+      fontSize: "1rem",
+      fontWeight: "360",
       lineHeight: "1.7",
     },
     ".cm-editor": {
@@ -53,6 +63,33 @@ const taskDescriptionExtensions = [
     ".cm-line": {
       padding: "0",
     },
+    ".cm-line--code-block": {
+      padding: "0.15rem 0.9rem",
+      margin: "0",
+      background: "color-mix(in srgb, var(--color-surface-elevated) 88%, black 12%)",
+      color: "var(--color-text-primary)",
+      fontFamily: '"Recursive Variable", "JetBrains Mono", monospace',
+      fontVariationSettings: '"MONO" 1, "CASL" 0.25',
+      fontSize: "0.92rem",
+      lineHeight: "1.65",
+    },
+    ".cm-line--code-block-info": {
+      paddingTop: "0.75rem",
+      paddingBottom: "0.35rem",
+      color: "var(--color-text-secondary)",
+      fontSize: "0.72rem",
+      fontWeight: 600,
+      letterSpacing: "0.08em",
+      textTransform: "uppercase",
+    },
+    ".cm-line--code-block-body": {
+      color: "var(--color-text-primary)",
+    },
+    ".cm-line--code-block-end": {
+      paddingTop: "0.15rem",
+      paddingBottom: "0.75rem",
+      color: "var(--color-text-primary)",
+    },
     ".cm-gutters": {
       display: "none",
     },
@@ -67,6 +104,87 @@ const taskDescriptionExtensions = [
       backgroundColor: "var(--color-text-primary)",
       color: "var(--color-main-bg)",
     },
+    ".cm-header": {
+      color: "var(--color-text-secondary)",
+      letterSpacing: "0.01em",
+    },
+    ".cm-header-1": {
+      color: "var(--color-accent)",
+      fontWeight: 600,
+    },
+    ".cm-header-2": {
+      color: "var(--color-accent-hover)",
+      fontWeight: 600,
+    },
+    ".cm-header-3": {
+      color: "var(--color-text-primary)",
+      opacity: 0.8,
+    },
+    ".cm-link": {
+      color: "var(--color-accent)",
+      textDecoration: "underline",
+      textDecorationColor: "color-mix(in srgb, var(--color-accent) 40%, transparent 60%)",
+    },
+    ".cm-link:hover": {
+      color: "var(--color-accent-hover)",
+    },
+    ".cm-strong": {
+      color: "var(--color-text-primary)",
+      fontWeight: 600,
+    },
+    ".cm-emphasis": {
+      color: "var(--color-text-muted)",
+      fontStyle: "italic",
+    },
+    ".cm-formatting": {
+      color: "var(--color-text-secondary)",
+    },
+    ".cm-formatting-link": {
+      color: "var(--color-accent-hover)",
+      fontWeight: 500,
+    },
+    ".cm-formatting-list": {
+      color: "var(--color-accent-hover)",
+      fontWeight: 600,
+    },
+    ".cm-list": {
+      color: "var(--color-text-primary)",
+    },
+    ".cm-conceal-widget": {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    ".cm-conceal-widget--list": {
+      minWidth: "1.15rem",
+      color: "var(--color-accent-hover)",
+      marginRight: "0.35rem",
+      fontSize: "0.9rem",
+      fontWeight: 600,
+      letterSpacing: "0.05em",
+    },
+    ".cm-conceal-widget--heading": {
+      minWidth: "1.15rem",
+      height: "1rem",
+      padding: "0 0.32rem",
+      marginRight: "0.45rem",
+      borderRadius: "999px",
+      background: "color-mix(in srgb, var(--color-accent) 16%, transparent 84%)",
+      color: "var(--color-accent)",
+      fontSize: "0.68rem",
+      fontWeight: 700,
+      letterSpacing: "0.03em",
+      lineHeight: 1,
+      verticalAlign: "baseline",
+      transform: "translateY(-0.06em)",
+    },
+    ".cm-line--list": {
+      paddingLeft: "0.35rem",
+      marginLeft: "-0.35rem",
+      borderRadius: "0.5rem",
+      background: "color-mix(in srgb, var(--color-surface-elevated) 55%, transparent 45%)",
+      border: "1px solid color-mix(in srgb, var(--color-panel-muted) 40%, transparent 60%)",
+    },
   }),
 ];
 
@@ -76,6 +194,7 @@ export function TaskDetailPage({
   onUpdateTask,
   onDeleteTask,
   onNotify,
+  draftResetKey = 0,
 }: TaskDetailPageProps) {
   const [pendingDeleteTask, setPendingDeleteTask] = useState<{
     id: string;
@@ -87,6 +206,7 @@ export function TaskDetailPage({
   const { draftContent, setDraftContent } = useDebouncedTaskDraft({
     taskId: task.id,
     initialContent: task.content,
+    syncKey: `${task.updatedAt}:${draftResetKey}`,
     onCommit: (content) => onUpdateTask(task.id, { content }),
   });
 
@@ -112,7 +232,7 @@ export function TaskDetailPage({
       <div ref={containerRef} className="task-detail-page__content">
         <header className="task-detail-page__header">
           <p className="task-detail-page__meta">
-            {labelForCompletion(task.isCompleted)} • {projectName} • {formatTaskTimestampLabel(task)}
+            {labelForCompletion(task.isCompleted)} • {projectName}
           </p>
           <h1 className="task-detail-page__title">
             <TaskTitleEditor
@@ -206,7 +326,9 @@ function TaskDescriptionEditor({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const { handleEditorCreate, handleEditorUpdate } = useTaskDescriptionEditor(focusKey);
+  const { handleEditorCreate, handleEditorUpdate, vimMode } = useTaskDescriptionEditor(focusKey);
+  const wordCount = countWords(value);
+  const characterCount = value.length;
 
   return (
     <div className="task-description-editor">
@@ -220,6 +342,7 @@ function TaskDescriptionEditor({
           lineNumbers: false,
           foldGutter: false,
           dropCursor: false,
+          closeBrackets: false,
           allowMultipleSelections: false,
           highlightActiveLine: false,
           highlightActiveLineGutter: false,
@@ -230,8 +353,30 @@ function TaskDescriptionEditor({
         }}
         onChange={onChange}
       />
+      <div className="task-description-editor__status" aria-label="Editor status">
+        <span className="task-description-editor__status-mode" data-mode={vimMode}>
+          {formatEditorModeLabel(vimMode)}
+        </span>
+        <span className="task-description-editor__status-counts">
+          {wordCount}W {characterCount}C
+        </span>
+      </div>
     </div>
   );
+}
+
+function countWords(value: string) {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return 0;
+  }
+
+  return trimmedValue.split(/\s+/).length;
+}
+
+function formatEditorModeLabel(mode: "insert" | "normal" | "visual") {
+  return mode.toUpperCase();
 }
 
 function TaskDeleteConfirmModal({
@@ -278,15 +423,6 @@ function TaskDeleteConfirmModal({
       </div>
     </Modal>
   );
-}
-
-function formatTaskTimestampLabel(task: Item) {
-  const timestampPrefix = task.updatedAt !== task.createdAt ? "UPDATED" : "CREATED";
-  const timestampValue = formatRelativeTimestamp(
-    task.updatedAt !== task.createdAt ? task.updatedAt : task.createdAt,
-  );
-
-  return `${timestampPrefix} ${timestampValue.toUpperCase()}`;
 }
 
 function TaskTitleEditor({

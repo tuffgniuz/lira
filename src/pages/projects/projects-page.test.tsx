@@ -194,6 +194,25 @@ describe("ProjectsPage board", () => {
     expect(within(createdOnlyTask).queryByText(/LOW|MEDIUM|HIGH|URGENT/)).not.toBeInTheDocument();
   });
 
+  it("does not render task descriptions inside kanban lane cards", () => {
+    renderProjectsPage({
+      items: [
+        createTask({
+          id: "task-with-description",
+          title: "Task with notes",
+          content: "This description should stay out of the lane card.",
+        }),
+      ],
+    });
+
+    const taskCard = screen.getByLabelText("Task card Task with notes");
+
+    expect(within(taskCard).getByText("Task with notes")).toBeInTheDocument();
+    expect(
+      within(taskCard).queryByText("This description should stay out of the lane card."),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders a simple task list when the selected project has no kanban board", () => {
     renderProjectsPage({
       projects: [

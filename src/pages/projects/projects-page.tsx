@@ -1374,9 +1374,6 @@ export function ProjectsPage({
                           {formatTaskTimestampLabel(task)}
                         </p>
                         <p className="projects-board-card__title">{task.title}</p>
-                        {task.content.trim() ? (
-                          <p className="projects-board-card__copy">{task.content}</p>
-                        ) : null}
                         {task.priority || task.dueDate ? (
                           <div className="projects-board-card__meta" aria-label="Task metadata">
                             {task.priority ? (

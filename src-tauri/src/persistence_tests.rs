@@ -2,11 +2,9 @@ use crate::persistence::{
     capture_repository::CaptureRepository,
     database::Database,
     goal_repository::GoalRepository,
-    journal_repository::JournalRepository,
     models::{
         Capture, CaptureLifecycleStatus, CaptureTriageStatus, EntityTag, Goal, GoalProgressEntry,
-        GoalStatus, GoalTrackingMode, GoalType, JournalCommitment, JournalCommitmentStatus,
-        JournalEntry, Project, ProjectBoardLane, ProjectStatus, ProjectTaskTemplate,
+        GoalStatus, GoalTrackingMode, GoalType, Project, ProjectBoardLane, ProjectStatus, ProjectTaskTemplate,
         ProjectTaskTemplateField, ProjectTaskTemplateFieldType, Relationship, Tag, Task,
         TaskLifecycleStatus, TaskQuery, TaskScheduleBucket, UserProfile,
     },
@@ -128,29 +126,6 @@ fn sample_goal_progress_entry() -> GoalProgressEntry {
     }
 }
 
-fn sample_journal_entry() -> JournalEntry {
-    JournalEntry {
-        id: "journal-2026-03-17".into(),
-        entry_date: "2026-03-17".into(),
-        title: Some("Daily note".into()),
-        content_markdown: Some("Finished the backend plan.".into()),
-        morning_intention: Some("Stay focused".into()),
-        reflection_prompt: Some("What moved forward?".into()),
-        created_at: "2026-03-17T08:00:00Z".into(),
-        updated_at: "2026-03-17T08:00:00Z".into(),
-    }
-}
-
-fn sample_commitment() -> JournalCommitment {
-    JournalCommitment {
-        id: "commitment-1".into(),
-        journal_entry_id: "journal-2026-03-17".into(),
-        text: "Finish the persistence refactor".into(),
-        status: JournalCommitmentStatus::Open,
-        sort_order: 0,
-    }
-}
-
 fn sample_tag() -> Tag {
     Tag {
         id: "tag-1".into(),
@@ -259,6 +234,53 @@ fn creates_reads_updates_and_filters_tasks() {
     assert_eq!(done_tasks.len(), 1);
     assert_eq!(done_tasks[0].completed_at.as_deref(), Some("2026-03-17T11:00:00Z"));
     assert_eq!(done_tasks[0].project_lane_id.as_deref(), Some("project-1-lane-to-do"));
+}
+
+#[test]
+fn rejects_stale_task_updates_that_arrive_after_newer_writes() {
+    let db = test_db();
+    ProjectRepository::new(&db)
+        .create(sample_project())
+        .expect("project should be created");
+    CaptureRepository::new(&db)
+        .create(sample_capture())
+        .expect("capture should be created");
+
+    let repository = TaskRepository::new(&db);
+    repository
+        .create(sample_task())
+        .expect("task should be created");
+
+    let fetched = repository
+        .get("task-1")
+        .expect("task lookup should succeed")
+        .expect("task should exist");
+
+    repository
+        .update(Task {
+            description: Some("Newest description".into()),
+            updated_at: "2026-03-17T12:00:00Z".into(),
+            ..fetched.clone()
+        })
+        .expect("newer task update should succeed");
+
+    let stale_result = repository.update(Task {
+        description: Some("Stale description".into()),
+        updated_at: "2026-03-17T11:00:00Z".into(),
+        ..fetched
+    });
+
+    assert_eq!(
+        stale_result,
+        Err("task update rejected because a newer version already exists".into())
+    );
+
+    let persisted = repository
+        .get("task-1")
+        .expect("task lookup should succeed")
+        .expect("task should still exist");
+    assert_eq!(persisted.description.as_deref(), Some("Newest description"));
+    assert_eq!(persisted.updated_at, "2026-03-17T12:00:00Z");
 }
 
 #[test]
@@ -492,31 +514,6 @@ fn goal_progress_requires_existing_goal() {
     let result = repository.log_progress(sample_goal_progress_entry());
 
     assert!(result.is_err(), "goal progress should fail for missing goals");
-}
-
-#[test]
-fn creates_journal_entries_and_commitments() {
-    let db = test_db();
-    let repository = JournalRepository::new(&db);
-
-    repository
-        .upsert_entry(sample_journal_entry())
-        .expect("journal entry should save");
-    repository
-        .replace_commitments("journal-2026-03-17", vec![sample_commitment()])
-        .expect("commitments should save");
-
-    let entry = repository
-        .get_entry("2026-03-17")
-        .expect("journal lookup should succeed")
-        .expect("journal entry should exist");
-    assert_eq!(entry.title.as_deref(), Some("Daily note"));
-
-    let commitments = repository
-        .list_commitments("journal-2026-03-17")
-        .expect("commitments should load");
-    assert_eq!(commitments.len(), 1);
-    assert_eq!(commitments[0].text, "Finish the persistence refactor");
 }
 
 #[test]

@@ -2,19 +2,30 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import goalsPageSource from "./pages/goals/goals-page.tsx?raw";
 import inboxPageSource from "./pages/inbox/capture-inbox-page.tsx?raw";
-import journalingPageSource from "./pages/journaling/journaling-page.tsx?raw";
 import newProjectModalSource from "./components/actions/new-project-modal/new-project-modal.tsx?raw";
 import quickCaptureModalSource from "./components/actions/quick-capture-modal/quick-capture-modal.tsx?raw";
 import projectsPageSource from "./pages/projects/projects-page.tsx?raw";
 import settingsModalSource from "./components/actions/settings-modal/settings-modal.tsx?raw";
 import newTaskModalSource from "./components/actions/new-task-modal/new-task-modal.tsx?raw";
+import taskDescriptionMarkdownSource from "./lib/codemirror/task-description-markdown.ts?raw";
+import taskDetailPageSource from "./pages/tasks/task-detail-page.tsx?raw";
 import tasksPageSource from "./pages/tasks/tasks-page.tsx?raw";
 
 const appCss = readFileSync("src/styles/globals.css", "utf8");
+const mainSource = readFileSync("src/main.tsx", "utf8");
 
 function getCssBlock(selector: string) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = appCss.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`, "m"));
+
+  expect(match?.[1]).toBeDefined();
+
+  return match?.[1] ?? "";
+}
+
+function getSourceBlock(source: string, selector: string) {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = source.match(new RegExp(`${escapedSelector}:\\s*\\{([\\s\\S]*?)\\n\\s*\\}`, "m"));
 
   expect(match?.[1]).toBeDefined();
 
@@ -147,13 +158,9 @@ describe("ui consistency", () => {
   });
 
   it("keeps left-rail active backgrounds inside a right gutter", () => {
-    const journalList = getCssBlock(".journal-nav__list");
     const goalsList = getCssBlock(".goals-rail__list");
 
-    expect(journalList).toContain("padding-right: 0.5rem;");
     expect(goalsList).toContain("padding-right: 0.5rem;");
-
-    expect(journalList).not.toMatch(/margin-right:\s*-/);
     expect(goalsList).not.toMatch(/margin-right:\s*-/);
   });
 
@@ -168,6 +175,103 @@ describe("ui consistency", () => {
     expect(projectsBoard).toContain("gap: 2.25rem;");
     expect(projectsBoardLane).toContain("height: 100%;");
     expect(projectsBoardLane).toContain("background: transparent;");
+  });
+
+  it("keeps project template fields in the task detail page tightly grouped", () => {
+    const projectFieldStack = getCssBlock(".task-detail-page__project-field-stack");
+
+    expect(projectFieldStack).toContain("gap: 0.35rem;");
+  });
+
+  it("keeps markdown list markers readable inside the task editor", () => {
+    const formattingBlock = getSourceBlock(taskDetailPageSource, '".cm-formatting"');
+    const formattingListBlock = getSourceBlock(taskDetailPageSource, '".cm-formatting-list"');
+    const concealedListBlock = getSourceBlock(taskDetailPageSource, '".cm-conceal-widget--list"');
+    const concealedHeadingBlock = getSourceBlock(taskDetailPageSource, '".cm-conceal-widget--heading"');
+    const codeBlockLineBlock = getSourceBlock(taskDetailPageSource, '".cm-line--code-block"');
+    const codeBlockInfoBlock = getSourceBlock(taskDetailPageSource, '".cm-line--code-block-info"');
+    const codeBlockBodyBlock = getSourceBlock(taskDetailPageSource, '".cm-line--code-block-body"');
+    const codeBlockEndBlock = getSourceBlock(taskDetailPageSource, '".cm-line--code-block-end"');
+
+    expect(taskDetailPageSource).toContain("taskDescriptionHighlightExtensions");
+    expect(taskDescriptionMarkdownSource).toContain("HighlightStyle.define");
+    expect(taskDescriptionMarkdownSource).toContain("tag: tags.meta");
+    expect(taskDescriptionMarkdownSource).toContain("tag: [tags.keyword, tags.controlKeyword, tags.operatorKeyword, tags.modifier]");
+    expect(taskDescriptionMarkdownSource).toContain(`tag: tags.heading,
+        color: "var(--color-accent)"`);
+    expect(taskDescriptionMarkdownSource).toContain('color: "var(--color-accent-hover)"');
+    expect(taskDetailPageSource).toContain("codeLanguages: taskDescriptionCodeLanguages");
+    expect(formattingBlock).toContain('color: "var(--color-text-secondary)"');
+    expect(formattingListBlock).toContain('color: "var(--color-accent-hover)"');
+    expect(concealedListBlock).toContain('color: "var(--color-accent-hover)"');
+    expect(concealedListBlock).toContain("fontWeight: 600");
+    expect(concealedHeadingBlock).toContain('color: "var(--color-accent)"');
+    expect(concealedHeadingBlock).toContain('borderRadius: "999px"');
+    expect(concealedHeadingBlock).toContain("fontWeight: 700");
+    expect(concealedHeadingBlock).toContain('verticalAlign: "baseline"');
+    expect(concealedHeadingBlock).toContain('transform: "translateY(-0.06em)"');
+    expect(codeBlockLineBlock).toContain('background: "color-mix(in srgb, var(--color-surface-elevated) 88%, black 12%)"');
+    expect(codeBlockLineBlock).toContain('fontFamily: \'"Recursive Variable", "JetBrains Mono", monospace\'');
+    expect(codeBlockInfoBlock).toContain('color: "var(--color-text-secondary)"');
+    expect(codeBlockBodyBlock).toContain('color: "var(--color-text-primary)"');
+    expect(codeBlockEndBlock).toContain('color: "var(--color-text-primary)"');
+    expect(codeBlockEndBlock).not.toContain('color: "transparent"');
+    expect(taskDetailPageSource).toContain('".cm-conceal-widget": {');
+  });
+
+  it("does not install a custom code-block exit plugin in the task editor", () => {
+    expect(taskDetailPageSource).not.toContain("markdownCodeBlockExit");
+  });
+
+  it("supports multiple fenced code languages and richer code token highlighting in the task editor", () => {
+    expect(taskDetailPageSource).toContain("taskDescriptionCodeLanguages");
+    expect(taskDescriptionMarkdownSource).toContain('alias: ["javascript", "js", "node", "nodejs", "jsx"]');
+    expect(taskDescriptionMarkdownSource).toContain('alias: ["typescript", "ts", "tsx"]');
+    expect(taskDescriptionMarkdownSource).toContain('alias: ["python", "py"]');
+    expect(taskDescriptionMarkdownSource).toContain('alias: ["bash", "sh", "shell", "zsh"]');
+    expect(taskDescriptionMarkdownSource).toContain("tags.propertyName");
+    expect(taskDescriptionMarkdownSource).toContain("tags.operator");
+    expect(taskDescriptionMarkdownSource).toContain("tags.regexp");
+    expect(taskDescriptionMarkdownSource).toContain("defaultHighlightStyle");
+  });
+
+  it("uses bundled recursive typography for the task description editor", () => {
+    expect(mainSource).toContain('@fontsource-variable/recursive');
+    expect(taskDetailPageSource).toContain('fontFamily: \'"Recursive Variable", "IBM Plex Sans", "Segoe UI", sans-serif\'');
+    expect(taskDetailPageSource).toContain('fontSize: "1rem"');
+    expect(taskDetailPageSource).toContain('fontWeight: "360"');
+  });
+
+  it("keeps the task editor status bar minimal and flat", () => {
+    const taskDetailContent = getCssBlock(".task-detail-page__content");
+    const editorSurface = getCssBlock(".task-description-editor__surface");
+    const editorFrame = getCssBlock(".task-description-editor__surface .cm-editor");
+    const statusBar = getCssBlock(".task-description-editor__status");
+    const statusMode = getCssBlock(".task-description-editor__status-mode");
+    const statusModeInsert = getCssBlock('.task-description-editor__status-mode[data-mode="insert"]');
+    const statusModeNormal = getCssBlock('.task-description-editor__status-mode[data-mode="normal"]');
+    const statusModeVisual = getCssBlock('.task-description-editor__status-mode[data-mode="visual"]');
+
+    expect(taskDetailContent).toContain("flex: 1;");
+    expect(editorSurface).toContain("border: none;");
+    expect(editorSurface).toContain("box-shadow: none;");
+    expect(editorFrame).toContain("border: none;");
+    expect(editorFrame).toContain("outline: none;");
+    expect(editorFrame).toContain("box-shadow: none;");
+    expect(statusBar).toContain("display: flex;");
+    expect(statusBar).toContain("justify-content: space-between;");
+    expect(statusBar).toContain("position: sticky;");
+    expect(statusBar).toContain("bottom: 0;");
+    expect(statusBar).toContain("width: 100%;");
+    expect(statusBar).toContain('background: color-mix(in srgb, var(--color-surface-elevated) 72%, transparent 28%);');
+    expect(statusBar).toContain('font-family: "Recursive Variable", "JetBrains Mono", monospace;');
+    expect(statusBar).not.toContain("border:");
+    expect(statusMode).toContain("color: var(--color-text-primary);");
+    expect(statusMode).toContain("padding:");
+    expect(statusModeInsert).toContain("background:");
+    expect(statusModeNormal).toContain("background:");
+    expect(statusModeVisual).toContain("background:");
+    expect(taskDetailPageSource).toContain('aria-label="Editor status"');
   });
 
   it("keeps equal breathing room above and below the project board title", () => {
@@ -221,7 +325,6 @@ describe("ui consistency", () => {
       projectsPageSource,
       goalsPageSource,
       inboxPageSource,
-      journalingPageSource,
       settingsModalSource,
     ]
       .join("\n");
