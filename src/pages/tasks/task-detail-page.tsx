@@ -191,6 +191,7 @@ const taskDescriptionExtensions = [
 export function TaskDetailPage({
   task,
   projects,
+  onBack,
   onUpdateTask,
   onDeleteTask,
   onNotify,
@@ -209,8 +210,66 @@ export function TaskDetailPage({
     syncKey: `${task.updatedAt}:${draftResetKey}`,
     onCommit: (content) => onUpdateTask(task.id, { content }),
   });
-
+  const exitShortcutArmedRef = useRef(false);
+  const exitShortcutTimeoutRef = useRef<number | null>(null);
   const containerRef = useTaskDetailNavigation();
+
+  useEffect(() => {
+    function clearExitShortcut() {
+      exitShortcutArmedRef.current = false;
+
+      if (exitShortcutTimeoutRef.current !== null) {
+        window.clearTimeout(exitShortcutTimeoutRef.current);
+        exitShortcutTimeoutRef.current = null;
+      }
+    }
+
+    function armExitShortcut() {
+      clearExitShortcut();
+      exitShortcutArmedRef.current = true;
+      exitShortcutTimeoutRef.current = window.setTimeout(() => {
+        clearExitShortcut();
+      }, 1200);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (pendingDeleteTask) {
+        clearExitShortcut();
+        return;
+      }
+
+      const loweredKey = event.key.toLowerCase();
+
+      if (!exitShortcutArmedRef.current) {
+        if (event.ctrlKey && !event.metaKey && !event.altKey && loweredKey === "z") {
+          event.preventDefault();
+          event.stopPropagation();
+          armExitShortcut();
+        }
+
+        return;
+      }
+
+      if (!event.metaKey && !event.altKey && loweredKey === "z") {
+        event.preventDefault();
+        event.stopPropagation();
+        clearExitShortcut();
+        onBack();
+        return;
+      }
+
+      if (!["Control", "Shift", "Alt", "Meta"].includes(event.key)) {
+        clearExitShortcut();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown, true);
+
+    return () => {
+      clearExitShortcut();
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [onBack, pendingDeleteTask]);
 
   return (
     <PageShell

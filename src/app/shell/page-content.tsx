@@ -36,7 +36,10 @@ type PageContentProps = {
   onCloseTaskDetail: (view: "tasks" | "projects") => void;
   onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
   onDeleteTask: (taskId: string) => void;
-  onUpdateProject: (projectId: string, updates: Partial<Project>) => void;
+  onUpdateProject: (
+    projectId: string,
+    updates: Partial<Project>,
+  ) => void | boolean | Promise<void | boolean>;
   onCreateCapture: (value: string) => void;
   onConvertCaptureToTask: (captureId: string, projectId?: string) => void;
   onConvertCaptureToGoal: (captureId: string, projectId?: string) => void;

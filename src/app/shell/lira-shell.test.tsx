@@ -496,6 +496,178 @@ describe("LiraShell list shortcuts", () => {
     );
   });
 
+  it("updates an existing project task template and shows a success notification", async () => {
+    mocks.loadProjects.mockResolvedValue([
+      {
+        id: "project-1",
+        name: "Lira",
+        description: "Main app",
+        hasKanbanBoard: false,
+        taskTemplate: {
+          updatedAt: "2026-03-17T00:00:00.000Z",
+          fields: [
+            {
+              id: "field-task-id",
+              key: "task_id",
+              label: "Task ID",
+              type: "text",
+            },
+          ],
+        },
+        boardLanes: [],
+        createdAt: "2026-03-17T00:00:00.000Z",
+        updatedAt: "2026-03-17T00:00:00.000Z",
+      },
+    ]);
+
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+      expect(mocks.loadProjects).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit task template" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Field label 2" }), {
+      target: { value: "Stage UUID" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Field type 2" }), {
+      target: { value: "boolean" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save template" }));
+
+    await waitFor(() => {
+      expect(mocks.saveProjects).toHaveBeenCalled();
+    });
+
+    const latestSavedProjects = mocks.saveProjects.mock.calls[
+      mocks.saveProjects.mock.calls.length - 1
+    ]?.[1] as Project[];
+
+    expect(latestSavedProjects[0]?.taskTemplate).toEqual({
+      updatedAt: expect.any(String),
+      fields: [
+        {
+          id: "field-task-id",
+          key: "task_id",
+          label: "Task ID",
+          type: "text",
+        },
+        {
+          id: expect.any(String),
+          key: "stage_uuid",
+          label: "Stage UUID",
+          type: "boolean",
+        },
+      ],
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Task template updated.");
+  });
+
+  it("clears an existing project task template when the last field is removed", async () => {
+    mocks.loadProjects.mockResolvedValue([
+      {
+        id: "project-1",
+        name: "Lira",
+        description: "Main app",
+        hasKanbanBoard: false,
+        taskTemplate: {
+          updatedAt: "2026-03-17T00:00:00.000Z",
+          fields: [
+            {
+              id: "field-task-id",
+              key: "task_id",
+              label: "Task ID",
+              type: "text",
+            },
+          ],
+        },
+        boardLanes: [],
+        createdAt: "2026-03-17T00:00:00.000Z",
+        updatedAt: "2026-03-17T00:00:00.000Z",
+      },
+    ]);
+
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+      expect(mocks.loadProjects).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit task template" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save template" }));
+
+    await waitFor(() => {
+      expect(mocks.saveProjects).toHaveBeenCalled();
+    });
+
+    const latestSavedProjects = mocks.saveProjects.mock.calls[
+      mocks.saveProjects.mock.calls.length - 1
+    ]?.[1] as Project[];
+
+    expect(latestSavedProjects[0]?.taskTemplate).toBeUndefined();
+    expect(screen.getByRole("status")).toHaveTextContent("Task template removed.");
+  });
+
+  it("keeps the task template modal open and shows a failure notification when saving fails", async () => {
+    mocks.loadProjects.mockResolvedValue([
+      {
+        id: "project-1",
+        name: "Lira",
+        description: "Main app",
+        hasKanbanBoard: false,
+        taskTemplate: {
+          updatedAt: "2026-03-17T00:00:00.000Z",
+          fields: [
+            {
+              id: "field-task-id",
+              key: "task_id",
+              label: "Task ID",
+              type: "text",
+            },
+          ],
+        },
+        boardLanes: [],
+        createdAt: "2026-03-17T00:00:00.000Z",
+        updatedAt: "2026-03-17T00:00:00.000Z",
+      },
+    ]);
+    mocks.saveProjects.mockRejectedValueOnce(new Error("sqlite busy"));
+
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+      expect(mocks.loadProjects).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit task template" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Field label 2" }), {
+      target: { value: "Stage UUID" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save template" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Failed to save projects: sqlite busy",
+      );
+    });
+    expect(screen.getByRole("dialog", { name: "Task template" })).toBeInTheDocument();
+  });
+
   it("creates a project-board task in the focused lane and links it to the project", async () => {
     renderShell();
 
@@ -846,7 +1018,7 @@ describe("LiraShell list shortcuts", () => {
     expect(screen.queryByRole("columnheader", { name: "Task" })).not.toBeInTheDocument();
   });
 
-  it("does not leave task detail when editor-like typing targets receive vim-related key presses", async () => {
+  it("leaves task detail when editor-like typing targets receive ctrl+z z", async () => {
     renderShell();
 
     await waitFor(() => {
@@ -864,9 +1036,9 @@ describe("LiraShell list shortcuts", () => {
 
     fireEvent.keyDown(editorSurface, { key: "z", ctrlKey: true });
     fireEvent.keyDown(editorSurface, { key: "z" });
-    fireEvent.keyDown(editorSurface, { key: "Escape" });
 
-    expect(screen.getByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Add list task shortcut" })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Task" })).toBeInTheDocument();
 
     editorSurface.remove();
   });

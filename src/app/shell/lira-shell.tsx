@@ -1496,8 +1496,8 @@ export function LiraShell() {
     );
   }
 
-  function handleUpdateProject(projectId: string, updates: Partial<Project>) {
-    void mutateProjects((current) => {
+  async function handleUpdateProject(projectId: string, updates: Partial<Project>) {
+    return mutateProjects((current) => {
       const existingProject = current.find((project) => project.id === projectId);
 
       if (!existingProject) {
@@ -1514,7 +1514,7 @@ export function LiraShell() {
           ? updates.hasKanbanBoard
           : existingProject.hasKanbanBoard;
       const nextTaskTemplate =
-        typeof updates.taskTemplate !== "undefined"
+        "taskTemplate" in updates
           ? updates.taskTemplate
           : existingProject.taskTemplate;
       let nextBoardLanes = updates.boardLanes ?? existingProject.boardLanes;

@@ -294,6 +294,41 @@ describe("TaskDetailPage", () => {
     expect(onDeleteTask).toHaveBeenCalledWith("task-1");
   });
 
+  it("closes the task detail page when pressing ctrl+z followed by z", () => {
+    const { onBack } = renderTaskDetailPage();
+
+    const titleInput = screen.getByRole("textbox", { name: "Task title" });
+
+    titleInput.focus();
+    fireEvent.keyDown(titleInput, { key: "z", ctrlKey: true });
+    fireEvent.keyDown(titleInput, { key: "z" });
+
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the task detail page with ctrl+z z even when the description editor is focused", () => {
+    const { onBack } = renderTaskDetailPage();
+
+    const descriptionEditor = screen.getByRole("textbox", { name: "Task description" });
+
+    descriptionEditor.focus();
+    fireEvent.keyDown(descriptionEditor, { key: "z", ctrlKey: true });
+    fireEvent.keyDown(descriptionEditor, { key: "z" });
+
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not close the task detail page on a single ctrl+z press", () => {
+    const { onBack } = renderTaskDetailPage();
+
+    const titleInput = screen.getByRole("textbox", { name: "Task title" });
+
+    titleInput.focus();
+    fireEvent.keyDown(titleInput, { key: "z", ctrlKey: true });
+
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
   it("renders project template fields and updates custom task values", () => {
     const { onUpdateTask } = renderTaskDetailPage({
       task: createTask({

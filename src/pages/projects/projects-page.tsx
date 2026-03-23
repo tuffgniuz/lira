@@ -26,7 +26,10 @@ type ProjectsPageProps = {
   items: Item[];
   todayDate: string;
   selectedProjectId: string;
-  onUpdateProject: (projectId: string, updates: Partial<Project>) => void;
+  onUpdateProject: (
+    projectId: string,
+    updates: Partial<Project>,
+  ) => void | boolean | Promise<void | boolean>;
   onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
   onDeleteTask: (taskId: string) => void;
   onNotify: (message: string) => void;
@@ -671,7 +674,7 @@ export function ProjectsPage({
       order: boardLanes.length,
     };
 
-    onUpdateProject(selectedProject.id, {
+    void onUpdateProject(selectedProject.id, {
       boardLanes: [...boardLanes, nextLane],
     });
     setNewLaneName("");
@@ -804,7 +807,7 @@ export function ProjectsPage({
   ) {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
-      handleSaveTaskTemplate();
+      void handleSaveTaskTemplate();
       return;
     }
 
@@ -845,7 +848,7 @@ export function ProjectsPage({
     focusTaskTemplateControl(rowIndex, "next-row");
   }
 
-  function handleSaveTaskTemplate() {
+  async function handleSaveTaskTemplate() {
     if (!selectedProject) {
       return;
     }
@@ -868,7 +871,7 @@ export function ProjectsPage({
       })
       .filter((field): field is ProjectTaskTemplateField => field !== null);
 
-    onUpdateProject(selectedProject.id, {
+    const didPersist = await onUpdateProject(selectedProject.id, {
       taskTemplate: normalizedFields.length
         ? {
             fields: normalizedFields,
@@ -877,9 +880,14 @@ export function ProjectsPage({
         : undefined,
     });
 
+    if (didPersist === false) {
+      return;
+    }
+
     setTaskTemplateModalOpen(false);
     setTaskTemplateDraftFields([]);
     setPendingTaskTemplateFocusIndex(null);
+    onNotify(normalizedFields.length ? "Task template updated." : "Task template removed.");
   }
 
   function updateTaskTemplateFieldLabel(fieldId: string, nextLabel: string) {
@@ -1039,7 +1047,9 @@ export function ProjectsPage({
                 type="button"
                 ref={saveTemplateButtonRef}
                 className="confirm-panel__button"
-                onClick={handleSaveTaskTemplate}
+                onClick={() => {
+                  void handleSaveTaskTemplate();
+                }}
               >
                 Save template
               </button>
