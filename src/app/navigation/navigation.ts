@@ -47,6 +47,7 @@ export const navigationItems: NavItem[] = [
 export const viewTitles: Record<ViewId, string> = {
   dashboard: "Dashboard",
   inbox: "Capture Inbox",
+  docs: "Docs",
   goals: "Goals",
   tasks: "Tasks",
   projects: "Projects",

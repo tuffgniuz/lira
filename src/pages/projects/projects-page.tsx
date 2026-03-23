@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { flushSync } from "react-dom";
 import { ActionBar } from "@/components/actions/action-bar";
-import { EditIcon } from "@/components/icons";
+import { CheckIcon, EditIcon } from "@/components/icons";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { FormField } from "@/components/data-input/form-field";
 import { Modal } from "@/components/actions/modal";
@@ -39,6 +39,7 @@ type ProjectsPageProps = {
     projectId: string;
     goalId: string;
     projectLaneId?: string;
+    isCompleted?: boolean;
     openDetailOnSuccess?: boolean;
   }) => string | undefined;
   onSelectTask: (taskId: string) => void;
@@ -103,6 +104,28 @@ function formatPriorityLabel(priority: Item["priority"]) {
   }
 
   return `${priority.charAt(0).toUpperCase()}${priority.slice(1)}`;
+}
+
+function isDoneLane(lane?: ProjectBoardLane) {
+  if (!lane) {
+    return false;
+  }
+
+  return lane.name.trim().toLowerCase() === "done" || lane.id.endsWith("-lane-done");
+}
+
+function getBoardTaskMoveUpdates(boardLanes: ProjectBoardLane[], targetLaneId: string): Partial<Item> {
+  const targetLane = boardLanes.find((lane) => lane.id === targetLaneId);
+
+  const nextUpdates: Partial<Item> = {
+    projectLaneId: targetLaneId,
+  };
+
+  if (isDoneLane(targetLane)) {
+    nextUpdates.isCompleted = true;
+  }
+
+  return nextUpdates;
 }
 
 export function ProjectsPage({
@@ -462,7 +485,10 @@ export function ProjectsPage({
       setPendingFocusedTaskId(currentState.activeTaskId);
       setActiveLaneId(targetLane.id);
       setActiveTaskId(currentState.activeTaskId);
-      onUpdateTask(currentState.activeTaskId, { projectLaneId: targetLane.id });
+      onUpdateTask(
+        currentState.activeTaskId,
+        getBoardTaskMoveUpdates(currentState.boardLanes, targetLane.id),
+      );
     }
 
     window.addEventListener("lira:project-board-lift", handleBoardLift as EventListener);
@@ -913,12 +939,14 @@ export function ProjectsPage({
       return;
     }
 
+    const isCompleted = isDoneLane(boardLanes.find((lane) => lane.id === draftTaskLaneId));
     const createdTaskId = onCreateTask({
       title: trimmedTitle,
       description: "",
       goalId: "",
       projectId: selectedProject.id,
       projectLaneId: draftTaskLaneId,
+      ...(isCompleted ? { isCompleted: true } : {}),
       openDetailOnSuccess: false,
     });
     setActiveLaneId(draftTaskLaneId);
@@ -1309,7 +1337,7 @@ export function ProjectsPage({
                       return;
                     }
 
-                    onUpdateTask(taskId, { projectLaneId: lane.id });
+                    onUpdateTask(taskId, getBoardTaskMoveUpdates(boardLanes, lane.id));
                     setDraggingTaskId("");
                   }}
                 >
@@ -1364,42 +1392,61 @@ export function ProjectsPage({
                         />
                       </form>
                     ) : null}
-                    {(laneGroups.get(lane.id) ?? []).map((task) => (
-                      <article
-                        key={task.id}
-                        className={`projects-board-card ${
-                          activeLaneId === lane.id && activeTaskId === task.id && !draftTaskLaneId ? "is-focused" : ""
-                        } ${
-                          liftedTaskId === task.id ? "is-lifted" : ""
-                        }`.trim()}
-                        aria-label={`Task card ${task.title}`}
-                        draggable
-                        onDragStart={(event) => {
-                          event.dataTransfer.setData("text/plain", task.id);
-                          setDraggingTaskId(task.id);
-                        }}
-                        onDragEnd={() => setDraggingTaskId("")}
-                      >
-                        <p className="projects-board-card__timestamp">
-                          {formatTaskTimestampLabel(task)}
-                        </p>
-                        <p className="projects-board-card__title">{task.title}</p>
-                        {task.priority || task.dueDate ? (
-                          <div className="projects-board-card__meta" aria-label="Task metadata">
-                            {task.priority ? (
-                              <span className="projects-board-card__meta-item">
-                                {task.priority.toUpperCase()}
-                              </span>
-                            ) : null}
-                            {task.dueDate ? (
-                              <span className="projects-board-card__meta-item">
-                                {`DUE ${task.dueDate}`}
+                    {(laneGroups.get(lane.id) ?? []).map((task) => {
+                      const showsCompletedStatus = task.isCompleted || isDoneLane(lane);
+
+                      return (
+                        <article
+                          key={task.id}
+                          className={`projects-board-card ${
+                            activeLaneId === lane.id && activeTaskId === task.id && !draftTaskLaneId ? "is-focused" : ""
+                          } ${
+                            liftedTaskId === task.id ? "is-lifted" : ""
+                          }`.trim()}
+                          aria-label={`Task card ${task.title}`}
+                          draggable
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData("text/plain", task.id);
+                            setDraggingTaskId(task.id);
+                          }}
+                          onMouseDown={() => {
+                            setActiveLaneId(lane.id);
+                            setActiveTaskId(task.id);
+                          }}
+                          onDoubleClick={() => onSelectTask(task.id)}
+                          onDragEnd={() => setDraggingTaskId("")}
+                        >
+                          <div className="projects-board-card__top-row">
+                            <p className="projects-board-card__timestamp">
+                              {formatTaskTimestampLabel(task)}
+                            </p>
+                            {showsCompletedStatus ? (
+                              <span
+                                className="projects-board-card__status"
+                                aria-label="Completed task"
+                              >
+                                <CheckIcon className="projects-board-card__status-icon" />
                               </span>
                             ) : null}
                           </div>
-                        ) : null}
-                      </article>
-                    ))}
+                          <p className="projects-board-card__title">{task.title}</p>
+                          {task.priority || task.dueDate ? (
+                            <div className="projects-board-card__meta" aria-label="Task metadata">
+                              {task.priority ? (
+                                <span className="projects-board-card__meta-item">
+                                  {task.priority.toUpperCase()}
+                                </span>
+                              ) : null}
+                              {task.dueDate ? (
+                                <span className="projects-board-card__meta-item">
+                                  {`DUE ${task.dueDate}`}
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })}
                   </div>
                 </section>
               ))}

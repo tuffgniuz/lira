@@ -1836,6 +1836,13 @@ button:focus-visible {
   min-width: 0;
 }
 
+.projects-board-card__top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
 .projects-board-card__timestamp {
   margin: 0;
   margin-bottom: 0.2rem;
@@ -1845,6 +1852,19 @@ button:focus-visible {
   letter-spacing: 0.08em;
   line-height: 1.4;
   text-transform: uppercase;
+}
+
+.projects-board-card__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--color-success);
+}
+
+.projects-board-card__status-icon {
+  width: 0.95rem;
+  height: 0.95rem;
 }
 
 .projects-board-card__copy {
@@ -3234,8 +3254,25 @@ button:focus-visible {
   flex: 0 0 auto;
 }
 
+.palette-item__content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
 .palette-item__label {
   min-width: 0;
+}
+
+.palette-item__meta {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.82;
 }
 
 .palette-empty {

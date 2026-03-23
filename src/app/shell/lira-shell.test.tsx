@@ -6,6 +6,7 @@ import { LiraShell } from "./lira-shell";
 import type { WorkspaceItem } from "@/models/workspace-item";
 import type { Project } from "@/models/project";
 import { defaultProjectBoardLanes } from "@/models/project-board";
+import type { Doc } from "@/models/doc";
 
 const mocks = vi.hoisted(() => ({
   dialogOpen: vi.fn(),
@@ -17,6 +18,10 @@ const mocks = vi.hoisted(() => ({
   saveProjects: vi.fn(),
   loadProfile: vi.fn(),
   saveProfile: vi.fn(),
+  loadDocs: vi.fn(),
+  createDoc: vi.fn(),
+  updateDoc: vi.fn(),
+  deleteDoc: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -44,6 +49,13 @@ vi.mock("@/services/projects", () => ({
 vi.mock("@/services/profile", () => ({
   loadProfile: mocks.loadProfile,
   saveProfile: mocks.saveProfile,
+}));
+
+vi.mock("@/services/docs", () => ({
+  loadDocs: mocks.loadDocs,
+  createDoc: mocks.createDoc,
+  updateDoc: mocks.updateDoc,
+  deleteDoc: mocks.deleteDoc,
 }));
 
 vi.mock("@uiw/react-codemirror", () => ({
@@ -109,6 +121,18 @@ function renderShell() {
       <LiraShell />
     </ThemeProvider>,
   );
+}
+
+function createDoc(overrides: Partial<Doc> = {}): Doc {
+  return {
+    id: "doc-1",
+    title: "Architecture notes",
+    body: "Document the local-first persistence boundary.",
+    projectId: "project-1",
+    createdAt: "2026-03-17T00:00:00.000Z",
+    updatedAt: "2026-03-17T00:00:00.000Z",
+    ...overrides,
+  };
 }
 
 function installLocalStorage(initialValues: Record<string, string> = {}) {
@@ -187,6 +211,10 @@ describe("LiraShell list shortcuts", () => {
       profilePicture: "",
     });
     mocks.saveProfile.mockResolvedValue(undefined);
+    mocks.loadDocs.mockResolvedValue([]);
+    mocks.createDoc.mockImplementation(async (_vaultPath: string, doc: Doc) => doc);
+    mocks.updateDoc.mockImplementation(async (_vaultPath: string, doc: Doc) => doc);
+    mocks.deleteDoc.mockResolvedValue(undefined);
   });
 
   it("opens list palettes for projects, tasks, goals, and inbox items from leader sequences", async () => {
@@ -225,6 +253,79 @@ describe("LiraShell list shortcuts", () => {
     expect(await screen.findByRole("textbox", { name: "Inbox" })).toHaveAttribute(
       "placeholder",
       "list inbox items",
+    );
+  });
+
+  it("creates a doc from the leader new-doc sequence and opens its detail view", async () => {
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadDocs).toHaveBeenCalled();
+      expect(mocks.loadProjects).toHaveBeenCalled();
+    });
+
+    pressSequence([" ", "n", "d"]);
+
+    fireEvent.change(await screen.findByRole("textbox", { name: "Doc title" }), {
+      target: { value: "Architecture notes" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Lira" }));
+    fireEvent.submit(screen.getByRole("textbox", { name: "Doc title" }).closest("form")!);
+
+    await waitFor(() => {
+      expect(mocks.createDoc).toHaveBeenCalledWith(
+        "/tmp/lira-test-vault",
+        expect.objectContaining({
+          title: "Architecture notes",
+          body: "",
+          projectId: "project-1",
+        }),
+      );
+    });
+
+    expect(await screen.findByRole("heading", { name: "Architecture notes" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Doc body" })).toHaveValue("");
+  });
+
+  it("opens the docs list palette from leader list-docs and opens the selected doc", async () => {
+    mocks.loadDocs.mockResolvedValue([
+      createDoc(),
+      createDoc({
+        id: "doc-2",
+        title: "Sprint notes",
+        body: "Summarize the current sprint.",
+        projectId: undefined,
+      }),
+    ]);
+
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadDocs).toHaveBeenCalled();
+    });
+
+    pressSequence([" ", "l", "d"]);
+
+    expect(await screen.findByRole("textbox", { name: "Docs" })).toHaveAttribute(
+      "placeholder",
+      "list docs",
+    );
+    expect(screen.getByText("Lira")).toBeInTheDocument();
+    expect(screen.getByText("Standalone")).toBeInTheDocument();
+
+    const linkedDocOption = screen.getByText("Architecture notes").closest('[role="option"]');
+    expect(linkedDocOption).not.toBeNull();
+    expect(
+      linkedDocOption.querySelector(
+        'path[d="M7 3.5h7l4 4V20.5H7a2.5 2.5 0 0 1-2.5-2.5V6A2.5 2.5 0 0 1 7 3.5Z"]',
+      ),
+    ).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("option", { name: /Sprint notes/i }));
+
+    expect(await screen.findByRole("heading", { name: "Sprint notes" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Doc body" })).toHaveValue(
+      "Summarize the current sprint.",
     );
   });
 
@@ -348,6 +449,48 @@ describe("LiraShell list shortcuts", () => {
     expect(screen.queryByText("Design the first task workspace layout")).not.toBeInTheDocument();
   });
 
+  it("does not save workspace changes after the workspace load fails", async () => {
+    mocks.loadWorkspaceItems.mockRejectedValueOnce(new Error("sqlite busy"));
+
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+    });
+
+    pressSequence([" ", "n", "i"]);
+    fireEvent.change(await screen.findByRole("textbox", { name: "Capture a thought" }), {
+      target: { value: "Do not persist after a failed load" },
+    });
+    fireEvent.submit(screen.getByRole("textbox", { name: "Capture a thought" }).closest("form")!);
+
+    expect(mocks.replaceWorkspaceItems).not.toHaveBeenCalled();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Failed to save workspace changes: vault is not ready",
+    );
+  });
+
+  it("does not save projects after the projects load fails", async () => {
+    mocks.loadProjects.mockRejectedValueOnce(new Error("sqlite busy"));
+
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadProjects).toHaveBeenCalled();
+    });
+
+    pressSequence([" ", "n", "p"]);
+    fireEvent.change(await screen.findByRole("textbox", { name: "Project name" }), {
+      target: { value: "Should not save" },
+    });
+    fireEvent.submit(screen.getByRole("textbox", { name: "Project name" }).closest("form")!);
+
+    expect(mocks.saveProjects).not.toHaveBeenCalled();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Failed to save projects: vault is not ready",
+    );
+  });
+
   it("keeps project-scoped task goals automatic when creating tasks", async () => {
     mocks.loadWorkspaceItems.mockResolvedValue([
       createWorkspaceItem({
@@ -427,6 +570,106 @@ describe("LiraShell list shortcuts", () => {
       "aria-pressed",
       "false",
     );
+  });
+
+  it("uses the current date when completing a task after midnight", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+
+    try {
+      vi.setSystemTime(new Date("2026-03-17T12:00:00.000Z"));
+      mocks.loadProjects.mockResolvedValue([
+        {
+          id: "project-1",
+          name: "Lira",
+          description: "Main app",
+          hasKanbanBoard: false,
+          boardLanes: [],
+          createdAt: "2026-03-17T00:00:00.000Z",
+          updatedAt: "2026-03-17T00:00:00.000Z",
+        },
+      ]);
+      mocks.loadWorkspaceItems.mockResolvedValue([
+        createWorkspaceItem({
+          id: "task-1",
+          kind: "task",
+          title: "Add list task shortcut",
+          projectId: "project-1",
+        }),
+      ]);
+
+      renderShell();
+
+      await waitFor(() => {
+        expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+        expect(mocks.loadProjects).toHaveBeenCalled();
+      });
+
+      vi.setSystemTime(new Date("2026-03-18T12:00:00.000Z"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+      expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
+
+      await screen.findByRole("row", { name: /Add list task shortcut/i });
+      const taskTable = screen.getByRole("table", { name: "Project tasks" });
+      await waitFor(() => {
+        expect(taskTable).toHaveFocus();
+      });
+
+      fireEvent.keyDown(taskTable, { key: "x" });
+
+      await waitFor(() => {
+        expect(mocks.updateTask).toHaveBeenCalledWith(
+          "/tmp/lira-test-vault",
+          expect.objectContaining({
+            id: "task-1",
+            isCompleted: true,
+            completedAt: "2026-03-18",
+          }),
+        );
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("removes deleted tasks from linked goal scopes before saving workspace changes", async () => {
+    mocks.loadWorkspaceItems.mockResolvedValue([
+      createWorkspaceItem({
+        id: "goal-1",
+        kind: "goal",
+        title: "Complete review tasks",
+        goalMetric: "tasks_completed",
+        goalTarget: 2,
+        goalPeriod: "daily",
+        goalScope: { taskIds: ["task-1"] },
+      }),
+      createWorkspaceItem({
+        id: "task-1",
+        kind: "task",
+        title: "Review task 1",
+      }),
+    ]);
+
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete Review task 1" }));
+
+    await waitFor(() => {
+      expect(mocks.replaceWorkspaceItems).toHaveBeenCalled();
+    });
+
+    const latestSavedItems = mocks.replaceWorkspaceItems.mock.calls[
+      mocks.replaceWorkspaceItems.mock.calls.length - 1
+    ]?.[1] as WorkspaceItem[];
+    const savedGoal = latestSavedItems.find((item) => item.id === "goal-1");
+
+    expect(savedGoal?.goalScope?.taskIds ?? []).toEqual([]);
+    expect(latestSavedItems.some((item) => item.id === "task-1")).toBe(false);
   });
 
   it("applies project task template keys to new project tasks", async () => {

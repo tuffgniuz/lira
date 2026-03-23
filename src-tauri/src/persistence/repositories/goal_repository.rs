@@ -2,8 +2,10 @@ use crate::persistence::database::Database;
 use crate::persistence::models::{
     Goal, GoalMilestone, GoalProgressEntry, GoalStatus, GoalTrackingMode, GoalType,
 };
-use crate::persistence::support::{decode_enum, encode_enum, option_string, to_sql_error};
-use rusqlite::{params, Transaction};
+use crate::persistence::support::{
+    decode_enum, encode_enum, option_string, run_in_transaction, to_sql_error,
+};
+use rusqlite::{params, Connection};
 
 #[cfg(test)]
 use rusqlite::OptionalExtension;
@@ -18,66 +20,25 @@ impl<'a> GoalRepository<'a> {
     }
 
     pub fn create(&self, goal: Goal) -> Result<(), String> {
-        let transaction = self
-            .db
-            .connection()
-            .unchecked_transaction()
-            .map_err(|error| error.to_string())?;
+        let connection = self.db.connection();
 
-        insert_goal(&transaction, &goal)?;
-        replace_schedule_days(&transaction, &goal.id, &goal.schedule_days)?;
-        replace_milestones(&transaction, &goal.id, &goal.milestones)?;
-
-        transaction.commit().map_err(|error| error.to_string())
+        run_in_transaction(connection, || {
+            insert_goal(connection, &goal)?;
+            replace_schedule_days(connection, &goal.id, &goal.schedule_days)?;
+            replace_milestones(connection, &goal.id, &goal.milestones)?;
+            Ok(())
+        })
     }
 
     pub fn update(&self, goal: Goal) -> Result<(), String> {
-        let transaction = self
-            .db
-            .connection()
-            .unchecked_transaction()
-            .map_err(|error| error.to_string())?;
+        let connection = self.db.connection();
 
-        transaction
-            .execute(
-                "
-                UPDATE goals
-                SET title = ?2, description = ?3, goal_type = ?4, status = ?5, tracking_mode = ?6,
-                    metric = ?7, target_value = ?8, current_value = ?9, period_unit = ?10, period_start = ?11,
-                    period_end = ?12, starts_at = ?13, ends_at = ?14, scope_project_id = ?15, scope_tag = ?16, source_query = ?17,
-                    created_at = ?18, updated_at = ?19, archived_at = ?20, completed_at = ?21
-                WHERE id = ?1
-                ",
-                params![
-                    goal.id,
-                    goal.title,
-                    goal.description,
-                    encode_enum(&goal.goal_type)?,
-                    encode_enum(&goal.status)?,
-                    encode_enum(&goal.tracking_mode)?,
-                    goal.metric,
-                    goal.target_value,
-                    goal.current_value,
-                    goal.period_unit,
-                    goal.period_start,
-                    goal.period_end,
-                    goal.starts_at,
-                    goal.ends_at,
-                    goal.scope_project_id,
-                    goal.scope_tag,
-                    goal.source_query,
-                    goal.created_at,
-                    goal.updated_at,
-                    goal.archived_at,
-                    goal.completed_at
-                ],
-            )
-            .map_err(|error| error.to_string())?;
-
-        replace_schedule_days(&transaction, &goal.id, &goal.schedule_days)?;
-        replace_milestones(&transaction, &goal.id, &goal.milestones)?;
-
-        transaction.commit().map_err(|error| error.to_string())
+        run_in_transaction(connection, || {
+            update_goal(connection, &goal)?;
+            replace_schedule_days(connection, &goal.id, &goal.schedule_days)?;
+            replace_milestones(connection, &goal.id, &goal.milestones)?;
+            Ok(())
+        })
     }
 
     #[cfg(test)]
@@ -135,40 +96,38 @@ impl<'a> GoalRepository<'a> {
     }
 
     pub fn log_progress(&self, entry: GoalProgressEntry) -> Result<(), String> {
-        let transaction = self
-            .db
-            .connection()
-            .unchecked_transaction()
-            .map_err(|error| error.to_string())?;
+        let connection = self.db.connection();
 
-        transaction
-            .execute(
-                "
-                INSERT INTO goal_progress_entries (
-                    id, goal_id, date, value, source_type, source_entity_type, source_entity_id, created_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-                ",
-                params![
-                    entry.id,
-                    entry.goal_id,
-                    entry.date,
-                    entry.value,
-                    entry.source_type,
-                    entry.source_entity_type,
-                    entry.source_entity_id,
-                    entry.created_at
-                ],
-            )
-            .map_err(|error| error.to_string())?;
+        run_in_transaction(connection, || {
+            connection
+                .execute(
+                    "
+                    INSERT INTO goal_progress_entries (
+                        id, goal_id, date, value, source_type, source_entity_type, source_entity_id, created_at
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                    ",
+                    params![
+                        entry.id,
+                        entry.goal_id,
+                        entry.date,
+                        entry.value,
+                        entry.source_type,
+                        entry.source_entity_type,
+                        entry.source_entity_id,
+                        entry.created_at
+                    ],
+                )
+                .map_err(|error| error.to_string())?;
 
-        transaction
-            .execute(
-                "UPDATE goals SET current_value = ?2 WHERE id = ?1",
-                params![entry.goal_id, entry.value],
-            )
-            .map_err(|error| error.to_string())?;
+            connection
+                .execute(
+                    "UPDATE goals SET current_value = ?2 WHERE id = ?1",
+                    params![entry.goal_id, entry.value],
+                )
+                .map_err(|error| error.to_string())?;
 
-        transaction.commit().map_err(|error| error.to_string())
+            Ok(())
+        })
     }
 
     pub fn list_progress_entries(&self, goal_id: &str) -> Result<Vec<GoalProgressEntry>, String> {
@@ -205,25 +164,26 @@ impl<'a> GoalRepository<'a> {
     }
 
     pub fn replace_all(&self, goals: Vec<Goal>) -> Result<(), String> {
-        self.db
-            .connection()
+        let connection = self.db.connection();
+        connection
             .execute("DELETE FROM goal_progress_entries", [])
             .map_err(|error| error.to_string())?;
-        self.db
-            .connection()
+        connection
             .execute("DELETE FROM goals", [])
             .map_err(|error| error.to_string())?;
 
-        for goal in goals {
-            self.create(goal)?;
+        for goal in &goals {
+            insert_goal(connection, goal)?;
+            replace_schedule_days(connection, &goal.id, &goal.schedule_days)?;
+            replace_milestones(connection, &goal.id, &goal.milestones)?;
         }
 
         Ok(())
     }
 }
 
-fn insert_goal(transaction: &Transaction<'_>, goal: &Goal) -> Result<(), String> {
-    transaction
+fn insert_goal(connection: &Connection, goal: &Goal) -> Result<(), String> {
+    connection
         .execute(
             "
             INSERT INTO goals (
@@ -260,17 +220,56 @@ fn insert_goal(transaction: &Transaction<'_>, goal: &Goal) -> Result<(), String>
         .map_err(|error| error.to_string())
 }
 
+fn update_goal(connection: &Connection, goal: &Goal) -> Result<(), String> {
+    connection
+        .execute(
+            "
+            UPDATE goals
+            SET title = ?2, description = ?3, goal_type = ?4, status = ?5, tracking_mode = ?6,
+                metric = ?7, target_value = ?8, current_value = ?9, period_unit = ?10, period_start = ?11,
+                period_end = ?12, starts_at = ?13, ends_at = ?14, scope_project_id = ?15, scope_tag = ?16, source_query = ?17,
+                created_at = ?18, updated_at = ?19, archived_at = ?20, completed_at = ?21
+            WHERE id = ?1
+            ",
+            params![
+                goal.id,
+                goal.title,
+                goal.description,
+                encode_enum(&goal.goal_type)?,
+                encode_enum(&goal.status)?,
+                encode_enum(&goal.tracking_mode)?,
+                goal.metric,
+                goal.target_value,
+                goal.current_value,
+                goal.period_unit,
+                goal.period_start,
+                goal.period_end,
+                goal.starts_at,
+                goal.ends_at,
+                goal.scope_project_id,
+                goal.scope_tag,
+                goal.source_query,
+                goal.created_at,
+                goal.updated_at,
+                goal.archived_at,
+                goal.completed_at
+            ],
+        )
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 fn replace_schedule_days(
-    transaction: &Transaction<'_>,
+    connection: &Connection,
     goal_id: &str,
     schedule_days: &[String],
 ) -> Result<(), String> {
-    transaction
+    connection
         .execute("DELETE FROM goal_schedule_days WHERE goal_id = ?1", params![goal_id])
         .map_err(|error| error.to_string())?;
 
     for day in schedule_days {
-        transaction
+        connection
             .execute(
                 "INSERT INTO goal_schedule_days (goal_id, weekday) VALUES (?1, ?2)",
                 params![goal_id, day],
@@ -282,16 +281,16 @@ fn replace_schedule_days(
 }
 
 fn replace_milestones(
-    transaction: &Transaction<'_>,
+    connection: &Connection,
     goal_id: &str,
     milestones: &[GoalMilestone],
 ) -> Result<(), String> {
-    transaction
+    connection
         .execute("DELETE FROM goal_milestones WHERE goal_id = ?1", params![goal_id])
         .map_err(|error| error.to_string())?;
 
     for milestone in milestones {
-        transaction
+        connection
             .execute(
                 "
                 INSERT INTO goal_milestones (

@@ -2,9 +2,10 @@ pub mod database;
 mod migrations;
 pub mod models;
 pub mod repositories;
-mod support;
+pub(crate) mod support;
 
 pub use repositories::capture_repository;
+pub use repositories::doc_repository;
 pub use repositories::goal_repository;
 pub use repositories::project_repository;
 pub use repositories::relationship_repository;

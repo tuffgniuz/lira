@@ -2,9 +2,11 @@ import { viewTitles } from "@/app/navigation/navigation";
 import type { ViewId } from "@/app/navigation/types";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { PageShell } from "@/components/layout/page-shell";
+import type { Doc } from "@/models/doc";
 import type { Item } from "@/models/workspace-item";
 import type { Project } from "@/models/project";
 import { CaptureInboxPage } from "@/pages/inbox/capture-inbox-page";
+import { DocDetailPage } from "@/pages/docs/doc-detail-page";
 import { buildInboxCaptureViews } from "@/pages/inbox/inbox-capture-view";
 import { GoalsPage } from "@/pages/goals/goals-page";
 import { ProjectsPage } from "@/pages/projects/projects-page";
@@ -14,11 +16,13 @@ import { TasksPage } from "@/pages/tasks/tasks-page";
 type PageContentProps = {
   activeView: ViewId;
   items: Item[];
+  docs: Doc[];
   todayDate: string;
   projects: Project[];
   selectedProjectId: string;
   selectedGoalId: string;
   selectedTaskId: string;
+  selectedDocId: string;
   onSelectGoal: (goalId: string) => void;
   onUpdateGoal: (goalId: string, updates: Partial<Item>) => void;
   onDeleteGoal: (goalId: string) => void;
@@ -29,6 +33,7 @@ type PageContentProps = {
     projectId: string;
     goalId: string;
     projectLaneId?: string;
+    isCompleted?: boolean;
     openDetailOnSuccess?: boolean;
   }) => string | undefined;
   onSelectTask: (taskId: string) => void;
@@ -36,6 +41,9 @@ type PageContentProps = {
   onCloseTaskDetail: (view: "tasks" | "projects") => void;
   onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
   onDeleteTask: (taskId: string) => void;
+  onCloseDocDetail: () => void;
+  onUpdateDoc: (docId: string, updates: Partial<Doc>) => void;
+  onDeleteDoc: (docId: string) => void;
   onUpdateProject: (
     projectId: string,
     updates: Partial<Project>,
@@ -50,16 +58,19 @@ type PageContentProps = {
   onDeleteCapture: (captureId: string) => void;
   onNotify: (message: string) => void;
   taskDraftResetKeys: Record<string, number>;
+  docDraftResetKeys: Record<string, number>;
 };
 
 export function PageContent({
   activeView,
   items,
+  docs,
   todayDate,
   projects,
   selectedProjectId,
   selectedGoalId,
   selectedTaskId,
+  selectedDocId,
   onSelectGoal,
   onUpdateGoal,
   onDeleteGoal,
@@ -70,6 +81,9 @@ export function PageContent({
   onCloseTaskDetail,
   onUpdateTask,
   onDeleteTask,
+  onCloseDocDetail,
+  onUpdateDoc,
+  onDeleteDoc,
   onUpdateProject,
   onCreateCapture,
   onConvertCaptureToTask,
@@ -78,6 +92,7 @@ export function PageContent({
   onDeleteCapture,
   onNotify,
   taskDraftResetKeys,
+  docDraftResetKeys,
 }: PageContentProps) {
   if (activeView === "dashboard") {
     return (
@@ -203,6 +218,34 @@ export function PageContent({
           onSelectTask={onOpenProjectTask}
         />
       )
+    );
+  }
+
+  if (activeView === "docs") {
+    const selectedDoc = docs.find((doc) => doc.id === selectedDocId) ?? null;
+
+    return selectedDoc ? (
+      <DocDetailPage
+        doc={selectedDoc}
+        projects={projects}
+        onBack={onCloseDocDetail}
+        onUpdateDoc={onUpdateDoc}
+        onDeleteDoc={onDeleteDoc}
+        onNotify={onNotify}
+        draftResetKey={docDraftResetKeys[selectedDoc.id] ?? 0}
+      />
+    ) : (
+      <PageShell
+        ariaLabel="Docs"
+        eyebrow="Workspace"
+        title="Docs"
+        className="page--placeholder"
+      >
+        <EmptyState
+          title="No doc is open"
+          copy="Open a doc from the docs palette or create one with the new-doc shortcut."
+        />
+      </PageShell>
     );
   }
 

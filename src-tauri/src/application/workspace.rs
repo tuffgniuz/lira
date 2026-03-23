@@ -7,12 +7,14 @@ use crate::persistence::models::{
     TaskLifecycleStatus, TaskQuery, TaskScheduleBucket,
 };
 use crate::persistence::relationship_repository::RelationshipRepository;
+use crate::persistence::support::run_in_transaction;
 use crate::persistence::tag_repository::TagRepository;
 use crate::persistence::task_repository::TaskRepository;
 use crate::transport::workspace::{
     WorkspaceGoalMilestoneDto, WorkspaceGoalScopeDto, WorkspaceItemDto,
 };
 use rusqlite::OptionalExtension;
+use std::collections::HashSet;
 
 pub fn load_workspace_items_from_db(db: &Database) -> Result<Vec<WorkspaceItemDto>, String> {
     let capture_repository = CaptureRepository::new(db);
@@ -24,6 +26,10 @@ pub fn load_workspace_items_from_db(db: &Database) -> Result<Vec<WorkspaceItemDt
     let captures = capture_repository.list()?;
     let tasks = task_repository.list(TaskQuery::default())?;
     let goals = goal_repository.list()?;
+    let task_ids = tasks
+        .iter()
+        .map(|task| task.id.clone())
+        .collect::<HashSet<_>>();
 
     let mut items = Vec::with_capacity(captures.len() + tasks.len() + goals.len());
 
@@ -42,7 +48,7 @@ pub fn load_workspace_items_from_db(db: &Database) -> Result<Vec<WorkspaceItemDt
     for goal in goals {
         let progress = goal_repository.list_progress_entries(&goal.id)?;
         let relationships = relationship_repository.list_for_entity("goal", &goal.id)?;
-        let mut item = workspace_item_from_goal(goal, progress, relationships);
+        let mut item = workspace_item_from_goal(goal, progress, relationships, &task_ids);
         item.tags = load_entity_tags(&tag_repository, "goal", &item.id)?;
         items.push(item);
     }
@@ -75,14 +81,15 @@ pub fn replace_workspace_items_in_db(db: &Database, items: Vec<WorkspaceItemDto>
         .map(goal_from_workspace_item)
         .collect::<Result<Vec<_>, _>>()?;
 
-    capture_repository.replace_all(captures)?;
-    task_repository.replace_all(tasks)?;
-    goal_repository.replace_all(goals)?;
-    replace_goal_progress_entries(db, &items)?;
-    replace_workspace_entity_tags(db, &items)?;
-    replace_goal_task_links(db, &items)?;
-
-    Ok(())
+    run_in_transaction(db.connection(), || {
+        capture_repository.replace_all(captures)?;
+        task_repository.replace_all(tasks)?;
+        goal_repository.replace_all(goals)?;
+        replace_goal_progress_entries(db, &items)?;
+        replace_workspace_entity_tags(db, &items)?;
+        replace_goal_task_links(db, &items)?;
+        Ok(())
+    })
 }
 
 fn workspace_item_from_capture(capture: Capture) -> WorkspaceItemDto {
@@ -166,6 +173,7 @@ fn workspace_item_from_goal(
     goal: Goal,
     progress_entries: Vec<GoalProgressEntry>,
     relationships: Vec<Relationship>,
+    task_ids: &HashSet<String>,
 ) -> WorkspaceItemDto {
     let goal_id = goal.id.clone();
     let goal_progress_by_date = progress_entries
@@ -179,6 +187,7 @@ fn workspace_item_from_goal(
                 && relationship.from_entity_id == goal_id
                 && relationship.to_entity_type == "task"
                 && relationship.relation_type == "goal_task_link"
+                && task_ids.contains(&relationship.to_entity_id)
         })
         .map(|relationship| relationship.to_entity_id)
         .collect::<Vec<_>>();
@@ -423,16 +432,25 @@ fn replace_goal_task_links(db: &Database, items: &[WorkspaceItemDto]) -> Result<
         .map_err(|error| error.to_string())?;
 
     let relationship_repository = RelationshipRepository::new(db);
+    let existing_task_ids = items
+        .iter()
+        .filter(|item| item.kind == "task")
+        .map(|item| item.id.as_str())
+        .collect::<HashSet<_>>();
 
     for item in items.iter().filter(|item| item.kind == "goal") {
-        let task_ids = item
+        let linked_task_ids = item
             .goal_scope
             .as_ref()
             .and_then(|scope| scope.task_ids.as_ref())
             .cloned()
             .unwrap_or_default();
 
-        for task_id in task_ids {
+        for task_id in linked_task_ids {
+            if !existing_task_ids.contains(task_id.as_str()) {
+                continue;
+            }
+
             relationship_repository.create(Relationship {
                 id: format!("relationship:goal-task:{}:{}", item.id, task_id),
                 from_entity_type: "goal".into(),

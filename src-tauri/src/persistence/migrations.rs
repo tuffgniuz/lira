@@ -58,6 +58,16 @@ pub fn run_migrations(connection: &Connection) -> Result<(), String> {
                 FOREIGN KEY(source_capture_id) REFERENCES captures(id) ON DELETE SET NULL
             );
 
+            CREATE TABLE IF NOT EXISTS docs (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                body TEXT NOT NULL,
+                project_id TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE SET NULL
+            );
+
             CREATE TABLE IF NOT EXISTS goals (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,

@@ -5,6 +5,7 @@ import { useCommandPaletteState } from "@/lib/hooks/use-command-palette-state";
 export type CommandPaletteItem = {
   id: string;
   label: string;
+  meta?: string;
   keywords?: string[];
   icon?: ReactNode;
 };
@@ -86,7 +87,12 @@ export function CommandPalette({
                 aria-selected={index === highlightedIndex}
               >
                 <span className="palette-item__icon">{item.icon}</span>
-                <span className="palette-item__label">{item.label}</span>
+                <span className="palette-item__content">
+                  <span className="palette-item__label">{item.label}</span>
+                  {item.meta ? (
+                    <span className="palette-item__meta">{item.meta}</span>
+                  ) : null}
+                </span>
               </button>
             ))
           ) : (

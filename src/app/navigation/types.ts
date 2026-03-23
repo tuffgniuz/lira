@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 export type ViewId =
   | "dashboard"
   | "inbox"
+  | "docs"
   | "goals"
   | "tasks"
   | "projects";

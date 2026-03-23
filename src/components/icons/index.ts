@@ -3,6 +3,7 @@ export {
   ArrowTurnIcon,
   BookOpenIcon,
   BurgerIcon,
+  CheckIcon,
   CheckSquareIcon,
   CollapseSidebarIcon,
   ColumnsIcon,

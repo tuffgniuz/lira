@@ -7,6 +7,7 @@ import {
   BurgerIcon,
   CollapseSidebarIcon,
   LayersIcon,
+  NoteIcon,
   SettingsIcon,
   SparkIcon,
 } from "@/components/icons";
@@ -18,12 +19,20 @@ import {
 } from "@/app/navigation/navigation";
 import {
   leaderKey, listGoalsSequence, listInboxItemsSequence, listProjectsSequence,
-  listTasksSequence, mappedSequences, newGoalSequence, newInboxItemSequence,
-  newProjectSequence, newTaskSequence, normalizeMappedKey, pageSequence, sequenceStartsWith,
+  listTasksSequence, listDocsSequence, mappedSequences, newDocSequence,
+  newGoalSequence, newInboxItemSequence, newProjectSequence, newTaskSequence,
+  normalizeMappedKey, pageSequence, sequenceStartsWith,
 } from "@/app/navigation/keymappings";
 
+import type { Doc } from "@/models/doc";
 import { loadProfile, saveProfile } from "@/services/profile";
 import { loadProjects, saveProjects } from "@/services/projects";
+import {
+  createDoc as persistCreateDoc,
+  deleteDoc as persistDeleteDoc,
+  loadDocs,
+  updateDoc as persistUpdateDoc,
+} from "@/services/docs";
 import { updateTask as persistTaskUpdate, type PersistedTask } from "@/services/tasks";
 import { loadWorkspaceItems, replaceWorkspaceItems } from "@/services/workspace";
 import { initializeVault } from "@/services/vault";
@@ -49,6 +58,7 @@ import {
 } from "@/theme/theme-types";
 import { QuickCaptureModal } from "@/components/actions/quick-capture-modal";
 import { SettingsModal } from "@/components/actions/settings-modal";
+import { NewDocModal } from "@/components/actions/new-doc-modal/new-doc-modal";
 import { NewTaskModal } from "@/components/actions/new-task-modal";
 import { PageContent } from "./page-content";
 
@@ -159,6 +169,23 @@ function getDefaultProjectLaneId(projects: Project[], projectId?: string) {
   return defaultProjectBoardLanes(projectId)[0]?.id;
 }
 
+function pruneGoalScopeTaskId(goalScope: Item["goalScope"], taskId: string) {
+  if (!goalScope?.taskIds?.includes(taskId)) {
+    return goalScope;
+  }
+
+  const nextTaskIds = goalScope.taskIds.filter((candidateId) => candidateId !== taskId);
+
+  if (!goalScope.projectId && !goalScope.tag && nextTaskIds.length === 0) {
+    return undefined;
+  }
+
+  return {
+    ...goalScope,
+    taskIds: nextTaskIds,
+  };
+}
+
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) {
     return false;
@@ -179,12 +206,13 @@ function isTypingTarget(target: EventTarget | null) {
   );
 }
 
-type ListPaletteKind = "projects" | "tasks" | "goals" | "inbox";
+type ListPaletteKind = "projects" | "tasks" | "goals" | "inbox" | "docs";
 type NavigationLocation = {
   view: ViewId;
   selectedProjectId: string;
   selectedGoalId: string;
   selectedTaskId: string;
+  selectedDocId: string;
 };
 
 function locationsMatch(left: NavigationLocation, right: NavigationLocation) {
@@ -192,7 +220,8 @@ function locationsMatch(left: NavigationLocation, right: NavigationLocation) {
     left.view === right.view &&
     left.selectedProjectId === right.selectedProjectId &&
     left.selectedGoalId === right.selectedGoalId &&
-    left.selectedTaskId === right.selectedTaskId
+    left.selectedTaskId === right.selectedTaskId &&
+    left.selectedDocId === right.selectedDocId
   );
 }
 
@@ -227,6 +256,7 @@ export function LiraShell() {
   const [pendingVaultPath, setPendingVaultPath] = useState(vaultPath);
   const [vaultError, setVaultError] = useState("");
   const [loadedItemVaultPath, setLoadedItemVaultPath] = useState("");
+  const [loadedDocVaultPath, setLoadedDocVaultPath] = useState("");
   const [loadedProjectVaultPath, setLoadedProjectVaultPath] = useState("");
   const [, setLoadedProfileVaultPath] = useState("");
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
@@ -236,11 +266,14 @@ export function LiraShell() {
   );
   const todayDate = getTodayDateString();
   const [items, setItems] = useState<Item[]>([]);
+  const [docs, setDocs] = useState<Doc[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedGoalId, setSelectedGoalId] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [selectedDocId, setSelectedDocId] = useState("");
   const [taskDraftResetKeys, setTaskDraftResetKeys] = useState<Record<string, number>>({});
+  const [docDraftResetKeys, setDocDraftResetKeys] = useState<Record<string, number>>({});
   const [toastMessage, setToastMessage] = useState("");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [listPaletteKind, setListPaletteKind] = useState<ListPaletteKind | null>(null);
@@ -249,18 +282,22 @@ export function LiraShell() {
   const [newGoalOpen, setNewGoalOpen] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState("");
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [newDocOpen, setNewDocOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const keySequenceRef = useRef<string[]>([]);
   const keySequenceTimeoutRef = useRef<number | null>(null);
   const itemMutationVersionRef = useRef(0);
+  const docMutationVersionRef = useRef(0);
   const projectMutationVersionRef = useRef(0);
   const taskSaveRequestVersionRef = useRef(new Map<string, number>());
+  const docSaveRequestVersionRef = useRef(new Map<string, number>());
   const pageHistoryRef = useRef<NavigationLocation[]>([
     {
       view: "dashboard",
       selectedProjectId: "",
       selectedGoalId: "",
       selectedTaskId: "",
+      selectedDocId: "",
     },
   ]);
   const pageHistoryIndexRef = useRef(0);
@@ -303,6 +340,18 @@ export function LiraShell() {
       keywords: [item.title.toLowerCase(), item.state, "inbox", "capture"],
       icon: <SparkIcon className="nav-icon" />,
     }));
+  const docItems: CommandPaletteItem[] = docs.map((doc) => ({
+    id: doc.id,
+    label: doc.title,
+    meta: getProjectName(projects, doc.projectId, "") || "Standalone",
+    keywords: [
+      doc.body.toLowerCase(),
+      getProjectName(projects, doc.projectId, "").toLowerCase(),
+      "doc",
+      "document",
+    ],
+    icon: <NoteIcon className="nav-icon" />,
+  }));
   const pendingTheme = themes.find((theme) => theme.id === pendingThemeId) ?? themes[0];
   const accentOptions = Object.entries(pendingTheme.colors).map(([token, color]) => ({
     id: token as ThemeColorToken,
@@ -333,13 +382,20 @@ export function LiraShell() {
               emptyMessage: "No goals match that query.",
               items: goalItems,
             }
-          : listPaletteKind === "inbox"
+            : listPaletteKind === "inbox"
             ? {
                 title: "Inbox",
                 placeholder: "list inbox items",
                 emptyMessage: "No inbox items match that query.",
                 items: inboxItems,
               }
+            : listPaletteKind === "docs"
+              ? {
+                  title: "Docs",
+                  placeholder: "list docs",
+                  emptyMessage: "No docs match that query.",
+                  items: docItems,
+                }
             : null;
 
   const commandItems: CommandPaletteItem[] = [
@@ -366,6 +422,12 @@ export function LiraShell() {
       label: "New task",
       keywords: ["nt", "new", "task"],
       icon: <SparkIcon className="nav-icon" />,
+    },
+    {
+      id: "new-doc",
+      label: "New doc",
+      keywords: ["nd", "new", "doc", "document"],
+      icon: <NoteIcon className="nav-icon" />,
     },
     {
       id: "new-project",
@@ -553,6 +615,13 @@ export function LiraShell() {
         return;
       }
 
+      if (event.key === "Escape" && newDocOpen) {
+        event.preventDefault();
+        setNewDocOpen(false);
+        clearKeySequence();
+        return;
+      }
+
       if (event.key === "Escape" && newProjectOpen) {
         event.preventDefault();
         setNewProjectOpen(false);
@@ -579,6 +648,7 @@ export function LiraShell() {
         quickCaptureOpen ||
         newGoalOpen ||
         newTaskOpen ||
+        newDocOpen ||
         newProjectOpen ||
         settingsOpen ||
         typingTarget
@@ -721,6 +791,13 @@ export function LiraShell() {
         return;
       }
 
+      if (nextSequence.join("") === listDocsSequence.join("")) {
+        event.preventDefault();
+        openListPalette("docs");
+        clearKeySequence();
+        return;
+      }
+
       if (nextSequence.join("") === newInboxItemSequence.join("")) {
         event.preventDefault();
         setQuickCaptureOpen(true);
@@ -739,6 +816,13 @@ export function LiraShell() {
       if (nextSequence.join("") === newTaskSequence.join("")) {
         event.preventDefault();
         setNewTaskOpen(true);
+        clearKeySequence();
+        return;
+      }
+
+      if (nextSequence.join("") === newDocSequence.join("")) {
+        event.preventDefault();
+        setNewDocOpen(true);
         clearKeySequence();
         return;
       }
@@ -770,6 +854,7 @@ export function LiraShell() {
     commandPaletteOpen,
     listPaletteKind,
     newGoalOpen,
+    newDocOpen,
     newProjectOpen,
     newTaskOpen,
     projects.length,
@@ -864,7 +949,38 @@ export function LiraShell() {
       .catch(() => {
         if (!cancelled) {
           setItems([]);
-          setLoadedItemVaultPath(vaultPath);
+          setLoadedItemVaultPath("");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [vaultPath]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const initialDocMutationVersion = docMutationVersionRef.current;
+
+    if (!vaultPath) {
+      setDocs([]);
+      setLoadedDocVaultPath("");
+      return;
+    }
+
+    void loadDocs(vaultPath)
+      .then((loadedDocs) => {
+        if (!cancelled) {
+          if (docMutationVersionRef.current === initialDocMutationVersion) {
+            setDocs(loadedDocs);
+          }
+          setLoadedDocVaultPath(vaultPath);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDocs([]);
+          setLoadedDocVaultPath("");
         }
       });
 
@@ -895,7 +1011,7 @@ export function LiraShell() {
       .catch(() => {
         if (!cancelled) {
           setProjects([]);
-          setLoadedProjectVaultPath(vaultPath);
+          setLoadedProjectVaultPath("");
         }
       });
 
@@ -960,6 +1076,7 @@ export function LiraShell() {
       selectedProjectId,
       selectedGoalId,
       selectedTaskId,
+      selectedDocId,
       ...overrides,
     };
   }
@@ -969,6 +1086,7 @@ export function LiraShell() {
     setSelectedProjectId(location.selectedProjectId);
     setSelectedGoalId(location.selectedGoalId);
     setSelectedTaskId(location.selectedTaskId);
+    setSelectedDocId(location.selectedDocId);
   }
 
   function navigateToLocation(
@@ -1048,6 +1166,15 @@ export function LiraShell() {
     );
   }
 
+  function navigateToDoc(docId: string) {
+    navigateToLocation(
+      buildNavigationLocation({
+        view: "docs",
+        selectedDocId: docId,
+      }),
+    );
+  }
+
   function navigateToInboxItem(_itemId: string) {
     navigateToPage("inbox");
   }
@@ -1070,6 +1197,23 @@ export function LiraShell() {
     );
   }
 
+  function closeDocDetail() {
+    if (
+      pageHistoryRef.current[pageHistoryIndexRef.current]?.view === "docs" &&
+      pageHistoryIndexRef.current > 0
+    ) {
+      navigatePageHistory(-1);
+      return;
+    }
+
+    navigateToLocation(
+      buildNavigationLocation({
+        view: "dashboard",
+        selectedDocId: "",
+      }),
+    );
+  }
+
   function handleSelectTask(taskId: string) {
     if (taskId) {
       openTaskDetailInView(taskId, "tasks");
@@ -1084,11 +1228,17 @@ export function LiraShell() {
   }
 
   function openListPalette(kind: ListPaletteKind) {
+    if (kind === "docs" && loadedDocVaultPath !== vaultPath) {
+      setListPaletteKind(kind);
+      return;
+    }
+
     const configs = {
       projects: { count: projects.length, emptyMessage: "No projects yet." },
       tasks: { count: taskItems.length, emptyMessage: "No tasks yet." },
       goals: { count: goalItems.length, emptyMessage: "No goals yet." },
       inbox: { count: inboxItems.length, emptyMessage: "No inbox items yet." },
+      docs: { count: docItems.length, emptyMessage: "No docs yet." },
     } satisfies Record<ListPaletteKind, { count: number; emptyMessage: string }>;
 
     const config = configs[kind];
@@ -1213,6 +1363,10 @@ export function LiraShell() {
       navigateToInboxItem(item.id);
     }
 
+    if (listPaletteKind === "docs") {
+      navigateToDoc(item.id);
+    }
+
     setListPaletteKind(null);
   }
 
@@ -1267,10 +1421,12 @@ export function LiraShell() {
     projectId: string;
     goalId: string;
     projectLaneId?: string;
+    isCompleted?: boolean;
     openDetailOnSuccess?: boolean;
   }) {
     const timestamp = getCurrentTimestamp();
     const nextTaskId = `item-${Date.now()}`;
+    const isCompleted = task.isCompleted ?? false;
     const nextTask: Item = {
       id: nextTaskId,
       kind: "task",
@@ -1284,10 +1440,10 @@ export function LiraShell() {
       projectId: task.projectId || undefined,
       projectLaneId: task.projectLaneId || getDefaultProjectLaneId(projects, task.projectId),
       project: getProjectName(projects, task.projectId, ""),
-      isCompleted: false,
+      isCompleted,
       priority: "",
       dueDate: "",
-      completedAt: "",
+      completedAt: isCompleted ? getTodayDateString() : "",
       estimate: "",
       customFieldValues: getInitialTaskCustomFieldValues(projects, task.projectId || undefined),
       goalMetric: "tasks_completed",
@@ -1352,6 +1508,43 @@ export function LiraShell() {
     );
 
     return nextTaskId;
+  }
+
+  function handleCreateDoc(doc: {
+    title: string;
+    body: string;
+    projectId: string;
+    openDetailOnSuccess?: boolean;
+  }) {
+    if (!vaultPath || loadedDocVaultPath !== vaultPath) {
+      setToastMessage("Failed to save docs: vault is not ready");
+      return;
+    }
+
+    const timestamp = getCurrentTimestamp();
+    const nextDoc: Doc = {
+      id: `doc-${Date.now()}`,
+      title: doc.title,
+      body: doc.body,
+      projectId: doc.projectId || undefined,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+
+    void persistCreateDoc(vaultPath, nextDoc)
+      .then((savedDoc) => {
+        docMutationVersionRef.current += 1;
+        setDocs((current) => [savedDoc, ...current]);
+        setToastMessage("Doc saved to vault.");
+        setNewDocOpen(false);
+
+        if (doc.openDetailOnSuccess !== false) {
+          navigateToDoc(savedDoc.id);
+        }
+      })
+      .catch((error) => {
+        setToastMessage(formatPersistenceError("save doc", error));
+      });
   }
 
   function handleCreateGoal(goal: {
@@ -1566,12 +1759,13 @@ export function LiraShell() {
     }
 
     const timestamp = getCurrentTimestamp();
+    const completionDate = getTodayDateString();
     const nextTask: Item = {
       ...previousTask,
       ...updates,
       completedAt:
         updates.isCompleted === true
-          ? todayDate
+          ? completionDate
           : updates.isCompleted === false
             ? ""
             : previousTask.completedAt,
@@ -1609,6 +1803,51 @@ export function LiraShell() {
       }));
 
       setToastMessage(formatPersistenceError("save task", error));
+    });
+  }
+
+  function handleUpdateDoc(docId: string, updates: Partial<Doc>) {
+    if (!vaultPath || loadedDocVaultPath !== vaultPath) {
+      setToastMessage("Failed to save docs: vault is not ready");
+      return;
+    }
+
+    const previousDoc = docs.find((doc): doc is Doc => doc.id === docId);
+
+    if (!previousDoc) {
+      return;
+    }
+
+    const timestamp = getCurrentTimestamp();
+    const nextDoc: Doc = {
+      ...previousDoc,
+      ...updates,
+      projectId:
+        typeof updates.projectId === "string"
+          ? updates.projectId || undefined
+          : previousDoc.projectId,
+      updatedAt: timestamp,
+    };
+
+    setDocs((current) =>
+      current.map((doc) => (doc.id === docId ? nextDoc : doc)),
+    );
+
+    const requestVersion = (docSaveRequestVersionRef.current.get(docId) ?? 0) + 1;
+    docSaveRequestVersionRef.current.set(docId, requestVersion);
+    docMutationVersionRef.current += 1;
+
+    void persistUpdateDoc(vaultPath, nextDoc).catch((error) => {
+      if (docSaveRequestVersionRef.current.get(docId) !== requestVersion) {
+        return;
+      }
+
+      setDocs((current) => current.map((doc) => (doc.id === docId ? previousDoc : doc)));
+      setDocDraftResetKeys((current) => ({
+        ...current,
+        [docId]: (current[docId] ?? 0) + 1,
+      }));
+      setToastMessage(formatPersistenceError("save doc", error));
     });
   }
 
@@ -1774,7 +2013,24 @@ export function LiraShell() {
 
   function handleDeleteItem(itemId: string) {
     void mutateItems(
-      (current) => current.filter((item) => item.id !== itemId),
+      (current) => {
+        const deletedItem = current.find((item) => item.id === itemId);
+
+        if (!deletedItem) {
+          return current;
+        }
+
+        return current
+          .filter((item) => item.id !== itemId)
+          .map((item) =>
+            deletedItem.kind === "task" && item.kind === "goal"
+              ? {
+                  ...item,
+                  goalScope: pruneGoalScopeTaskId(item.goalScope, itemId),
+                }
+              : item,
+          );
+      },
       {
         onSuccess: () => {
           setSelectedTaskId((current) => (current === itemId ? "" : current));
@@ -1782,6 +2038,34 @@ export function LiraShell() {
         },
       },
     );
+  }
+
+  function handleDeleteDoc(docId: string) {
+    if (!vaultPath || loadedDocVaultPath !== vaultPath) {
+      setToastMessage("Failed to save docs: vault is not ready");
+      return;
+    }
+
+    const deletedDoc = docs.find((doc) => doc.id === docId);
+
+    if (!deletedDoc) {
+      return;
+    }
+
+    void persistDeleteDoc(vaultPath, docId)
+      .then(() => {
+        docMutationVersionRef.current += 1;
+        setDocs((current) => current.filter((doc) => doc.id !== docId));
+        setToastMessage(`Doc "${deletedDoc.title}" deleted`);
+        setSelectedDocId((current) => (current === docId ? "" : current));
+
+        if (selectedDocId === docId || activeView === "docs") {
+          closeDocDetail();
+        }
+      })
+      .catch((error) => {
+        setToastMessage(formatPersistenceError("delete doc", error));
+      });
   }
 
   function handleSelectCommand(item: CommandPaletteItem) {
@@ -1799,6 +2083,11 @@ export function LiraShell() {
 
     if (item.id === "new-task") {
       setNewTaskOpen(true);
+      return;
+    }
+
+    if (item.id === "new-doc") {
+      setNewDocOpen(true);
       return;
     }
 
@@ -1908,11 +2197,13 @@ export function LiraShell() {
             <PageContent
               activeView={activeView}
               items={items}
+              docs={docs}
               todayDate={todayDate}
               projects={projects}
               selectedProjectId={selectedProjectId}
               selectedGoalId={selectedGoalId}
               selectedTaskId={selectedTaskId}
+              selectedDocId={selectedDocId}
               onSelectGoal={setSelectedGoalId}
               onUpdateGoal={handleUpdateGoal}
               onDeleteGoal={handleDeleteItem}
@@ -1923,6 +2214,9 @@ export function LiraShell() {
               onCloseTaskDetail={closeTaskDetailInView}
               onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteItem}
+              onCloseDocDetail={closeDocDetail}
+              onUpdateDoc={handleUpdateDoc}
+              onDeleteDoc={handleDeleteDoc}
               onUpdateProject={handleUpdateProject}
               onCreateCapture={handleCaptureThought}
               onConvertCaptureToTask={handleConvertCaptureToTask}
@@ -1931,6 +2225,7 @@ export function LiraShell() {
               onDeleteCapture={handleDeleteItem}
               onNotify={setToastMessage}
               taskDraftResetKeys={taskDraftResetKeys}
+              docDraftResetKeys={docDraftResetKeys}
             />
           </div>
         </main>
@@ -2026,6 +2321,13 @@ export function LiraShell() {
           }))}
         projects={projects}
         onSubmit={handleCreateTask}
+      />
+
+      <NewDocModal
+        isOpen={newDocOpen}
+        onClose={() => setNewDocOpen(false)}
+        projects={projects}
+        onSubmit={handleCreateDoc}
       />
 
       <NewGoalModal

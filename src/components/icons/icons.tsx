@@ -54,6 +54,14 @@ export function CheckSquareIcon({ className }: { className?: string }) {
   );
 }
 
+export function CheckIcon({ className }: { className?: string }) {
+  return (
+    <IconBase className={className}>
+      <path d="m6.5 12.5 3.25 3.25 7.75-8.25" />
+    </IconBase>
+  );
+}
+
 export function LayersIcon({ className }: { className?: string }) {
   return (
     <IconBase className={className}>

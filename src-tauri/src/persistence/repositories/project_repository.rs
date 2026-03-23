@@ -2,8 +2,11 @@ use crate::persistence::database::Database;
 use crate::persistence::models::{
     Project, ProjectBoardLane, ProjectStatus, ProjectTaskTemplate,
 };
-use crate::persistence::support::{decode_enum, encode_enum, option_string, to_sql_error};
+use crate::persistence::support::{
+    decode_enum, encode_enum, option_string, run_in_transaction, to_sql_error,
+};
 use rusqlite::params;
+use std::collections::HashSet;
 
 fn default_project_board_lanes(project_id: &str) -> Vec<ProjectBoardLane> {
     vec![
@@ -66,7 +69,6 @@ impl<'a> ProjectRepository<'a> {
         self.replace_board_lanes(&project.id, &board_lanes)
     }
 
-    #[cfg(test)]
     pub fn update(&self, project: Project) -> Result<(), String> {
         let board_lanes = if project.has_kanban_board && project.board_lanes.is_empty() {
             default_project_board_lanes(&project.id)
@@ -153,20 +155,34 @@ impl<'a> ProjectRepository<'a> {
     }
 
     pub fn replace_all(&self, projects: Vec<Project>) -> Result<(), String> {
-        self.db
-            .connection()
-            .execute("DELETE FROM project_board_lanes", [])
-            .map_err(|error| error.to_string())?;
-        self.db
-            .connection()
-            .execute("DELETE FROM projects", [])
-            .map_err(|error| error.to_string())?;
+        let connection = self.db.connection();
+        let existing_ids = self
+            .list()?
+            .into_iter()
+            .map(|project| project.id)
+            .collect::<HashSet<_>>();
+        let next_ids = projects
+            .iter()
+            .map(|project| project.id.clone())
+            .collect::<HashSet<_>>();
 
-        for project in projects {
-            self.create(project)?;
-        }
+        run_in_transaction(connection, || {
+            for project in projects.clone() {
+                if existing_ids.contains(&project.id) {
+                    self.update(project)?;
+                } else {
+                    self.create(project)?;
+                }
+            }
 
-        Ok(())
+            for removed_project_id in existing_ids.difference(&next_ids) {
+                connection
+                    .execute("DELETE FROM projects WHERE id = ?1", params![removed_project_id])
+                    .map_err(|error| error.to_string())?;
+            }
+
+            Ok(())
+        })
     }
 
     fn list_board_lanes(&self, project_id: &str) -> Result<Vec<ProjectBoardLane>, String> {

@@ -1,12 +1,14 @@
+use crate::application::workspace::{load_workspace_items_from_db, replace_workspace_items_in_db};
 use crate::persistence::{
     capture_repository::CaptureRepository,
     database::Database,
+    doc_repository::DocRepository,
     goal_repository::GoalRepository,
     models::{
         Capture, CaptureLifecycleStatus, CaptureTriageStatus, EntityTag, Goal, GoalProgressEntry,
         GoalStatus, GoalTrackingMode, GoalType, Project, ProjectBoardLane, ProjectStatus, ProjectTaskTemplate,
         ProjectTaskTemplateField, ProjectTaskTemplateFieldType, Relationship, Tag, Task,
-        TaskLifecycleStatus, TaskQuery, TaskScheduleBucket, UserProfile,
+        TaskLifecycleStatus, TaskQuery, TaskScheduleBucket, UserProfile, Doc,
     },
     project_repository::ProjectRepository,
     relationship_repository::RelationshipRepository,
@@ -157,6 +159,17 @@ fn sample_profile() -> UserProfile {
     }
 }
 
+fn sample_doc() -> Doc {
+    Doc {
+        id: "doc-1".into(),
+        title: "Architecture notes".into(),
+        body: "Document the local-first persistence boundary.".into(),
+        project_id: Some("project-1".into()),
+        created_at: "2026-03-17T08:00:00Z".into(),
+        updated_at: "2026-03-17T08:00:00Z".into(),
+    }
+}
+
 #[test]
 fn creates_reads_and_updates_captures() {
     let db = test_db();
@@ -234,6 +247,50 @@ fn creates_reads_updates_and_filters_tasks() {
     assert_eq!(done_tasks.len(), 1);
     assert_eq!(done_tasks[0].completed_at.as_deref(), Some("2026-03-17T11:00:00Z"));
     assert_eq!(done_tasks[0].project_lane_id.as_deref(), Some("project-1-lane-to-do"));
+}
+
+#[test]
+fn creates_reads_updates_and_deletes_docs() {
+    let db = test_db();
+    ProjectRepository::new(&db)
+        .create(sample_project())
+        .expect("project should be created");
+
+    let repository = DocRepository::new(&db);
+    repository
+        .create(sample_doc())
+        .expect("doc should be created");
+
+    let created = repository
+        .get("doc-1")
+        .expect("doc lookup should succeed")
+        .expect("doc should exist");
+    assert_eq!(created.title, "Architecture notes");
+    assert_eq!(created.project_id.as_deref(), Some("project-1"));
+
+    repository
+        .update(Doc {
+            title: "Updated architecture notes".into(),
+            body: "Capture the Rust and TypeScript document boundary.".into(),
+            project_id: None,
+            updated_at: "2026-03-18T08:00:00Z".into(),
+            ..created
+        })
+        .expect("doc should update");
+
+    let docs = repository.list().expect("doc list should succeed");
+    assert_eq!(docs.len(), 1);
+    assert_eq!(docs[0].title, "Updated architecture notes");
+    assert_eq!(docs[0].project_id, None);
+
+    repository
+        .delete("doc-1")
+        .expect("doc should delete");
+
+    assert_eq!(
+        repository.get("doc-1").expect("doc lookup should succeed"),
+        None
+    );
 }
 
 #[test]
@@ -402,6 +459,49 @@ fn creates_reads_and_updates_project_board_lanes() {
 }
 
 #[test]
+fn replacing_projects_preserves_existing_entity_project_links_for_retained_projects() {
+    let db = test_db();
+
+    ProjectRepository::new(&db)
+        .create(sample_project())
+        .expect("project should be created");
+    CaptureRepository::new(&db)
+        .create(sample_capture())
+        .expect("capture should be created");
+    TaskRepository::new(&db)
+        .create(sample_task())
+        .expect("task should be created");
+    GoalRepository::new(&db)
+        .create(sample_goal())
+        .expect("goal should be created");
+
+    ProjectRepository::new(&db)
+        .replace_all(vec![Project {
+            description: Some("Updated workspace".into()),
+            updated_at: "2026-03-18T08:00:00Z".into(),
+            ..sample_project()
+        }])
+        .expect("project replacement should succeed");
+
+    let capture = CaptureRepository::new(&db)
+        .get("capture-1")
+        .expect("capture lookup should succeed")
+        .expect("capture should still exist");
+    let task = TaskRepository::new(&db)
+        .get("task-1")
+        .expect("task lookup should succeed")
+        .expect("task should still exist");
+    let goal = GoalRepository::new(&db)
+        .get("goal-1")
+        .expect("goal lookup should succeed")
+        .expect("goal should still exist");
+
+    assert_eq!(capture.project_id.as_deref(), Some("project-1"));
+    assert_eq!(task.project_id.as_deref(), Some("project-1"));
+    assert_eq!(goal.scope_project_id.as_deref(), Some("project-1"));
+}
+
+#[test]
 fn persists_projects_without_an_enabled_kanban_board() {
     let db = test_db();
     let repository = ProjectRepository::new(&db);
@@ -564,6 +664,108 @@ fn creates_projects_tags_entity_tags_relationships_and_profile() {
         .expect("profile lookup should succeed")
         .expect("profile should exist");
     assert_eq!(profile.name, "User");
+}
+
+#[test]
+fn workspace_replace_rolls_back_when_incoming_snapshot_is_invalid() {
+    let db = test_db();
+
+    ProjectRepository::new(&db)
+        .create(sample_project())
+        .expect("project should be created");
+    CaptureRepository::new(&db)
+        .create(sample_capture())
+        .expect("capture should be created");
+    TaskRepository::new(&db)
+        .create(sample_task())
+        .expect("task should be created");
+
+    let mut items = load_workspace_items_from_db(&db).expect("workspace items should load");
+    let invalid_task = items
+        .iter_mut()
+        .find(|item| item.kind == "task" && item.id == "task-1")
+        .expect("task should exist in workspace snapshot");
+    invalid_task.source_capture_id = Some("missing-capture".into());
+
+    let result = replace_workspace_items_in_db(&db, items);
+
+    assert!(result.is_err(), "invalid snapshot should fail");
+
+    let capture = CaptureRepository::new(&db)
+        .get("capture-1")
+        .expect("capture lookup should succeed")
+        .expect("capture should still exist after failed replacement");
+    let task = TaskRepository::new(&db)
+        .get("task-1")
+        .expect("task lookup should succeed")
+        .expect("task should still exist after failed replacement");
+
+    assert_eq!(capture.id, "capture-1");
+    assert_eq!(task.source_capture_id.as_deref(), Some("capture-1"));
+}
+
+#[test]
+fn workspace_replace_drops_goal_task_links_for_deleted_tasks() {
+    let db = test_db();
+
+    ProjectRepository::new(&db)
+        .create(sample_project())
+        .expect("project should be created");
+    CaptureRepository::new(&db)
+        .create(sample_capture())
+        .expect("capture should be created");
+    TaskRepository::new(&db)
+        .create(sample_task())
+        .expect("task should be created");
+    GoalRepository::new(&db)
+        .create(sample_goal())
+        .expect("goal should be created");
+    RelationshipRepository::new(&db)
+        .create(Relationship {
+            id: "relationship:goal-task:goal-1:task-1".into(),
+            from_entity_type: "goal".into(),
+            from_entity_id: "goal-1".into(),
+            to_entity_type: "task".into(),
+            to_entity_id: "task-1".into(),
+            relation_type: "goal_task_link".into(),
+            created_at: "2026-03-17T08:00:00Z".into(),
+        })
+        .expect("goal-task link should be created");
+
+    let items = load_workspace_items_from_db(&db)
+        .expect("workspace items should load")
+        .into_iter()
+        .filter(|item| item.id != "task-1")
+        .collect::<Vec<_>>();
+
+    replace_workspace_items_in_db(&db, items).expect("workspace replacement should succeed");
+
+    let reloaded_items = load_workspace_items_from_db(&db).expect("workspace items should reload");
+    let reloaded_goal = reloaded_items
+        .iter()
+        .find(|item| item.kind == "goal" && item.id == "goal-1")
+        .expect("goal should still exist");
+
+    assert_eq!(
+        reloaded_goal
+            .goal_scope
+            .as_ref()
+            .and_then(|scope| scope.task_ids.as_ref())
+            .map(Vec::as_slice),
+        None
+    );
+
+    let goal_relationships = RelationshipRepository::new(&db)
+        .list_for_entity("goal", "goal-1")
+        .expect("goal relationships should load");
+
+    assert!(
+        !goal_relationships.iter().any(|relationship| {
+            relationship.relation_type == "goal_task_link"
+                && relationship.to_entity_id == "task-1"
+        }),
+        "deleted task links should be removed from relationships",
+    );
 }
 
 #[test]

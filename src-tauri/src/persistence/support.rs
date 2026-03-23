@@ -27,3 +27,27 @@ pub fn to_sql_error(message: String) -> rusqlite::Error {
         Box::<dyn std::error::Error + Send + Sync>::from(message),
     )
 }
+
+pub fn run_in_transaction<T>(
+    connection: &rusqlite::Connection,
+    action: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    connection
+        .execute_batch("BEGIN IMMEDIATE")
+        .map_err(|error| error.to_string())?;
+
+    match action() {
+        Ok(result) => connection
+            .execute_batch("COMMIT")
+            .map(|_| result)
+            .map_err(|error| error.to_string()),
+        Err(error) => {
+            connection
+                .execute_batch("ROLLBACK")
+                .map_err(|rollback_error| {
+                    format!("{error} (rollback failed: {rollback_error})")
+                })?;
+            Err(error)
+        }
+    }
+}

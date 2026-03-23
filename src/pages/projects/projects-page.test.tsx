@@ -194,6 +194,23 @@ describe("ProjectsPage board", () => {
     expect(within(createdOnlyTask).queryByText(/LOW|MEDIUM|HIGH|URGENT/)).not.toBeInTheDocument();
   });
 
+  it("shows a completion checkmark on completed kanban cards", () => {
+    renderProjectsPage({
+      items: [
+        createTask({
+          id: "task-done",
+          title: "Done task",
+          isCompleted: true,
+          projectLaneId: "project-1-lane-done",
+        }),
+      ],
+    });
+
+    const taskCard = screen.getByLabelText("Task card Done task");
+
+    expect(within(taskCard).getByLabelText("Completed task")).toBeInTheDocument();
+  });
+
   it("does not render task descriptions inside kanban lane cards", () => {
     renderProjectsPage({
       items: [
@@ -841,6 +858,34 @@ describe("ProjectsPage board", () => {
 
     expect(onUpdateTask).toHaveBeenCalledWith("task-newer", {
       projectLaneId: "project-1-lane-in-progress",
+    });
+  });
+
+  it("marks a task complete when the focused card moves into the done lane", () => {
+    const { onUpdateTask } = renderProjectsPage({
+      items: [
+        createTask({
+          id: "task-progress-2",
+          title: "In progress newest",
+          projectLaneId: "project-1-lane-in-progress",
+          createdAt: "2026-03-19T00:00:00.000Z",
+          updatedAt: "2026-03-19T00:00:00.000Z",
+        }),
+      ],
+    });
+
+    fireEvent.keyDown(window, { key: "l" });
+    expect(screen.getByLabelText("Task card In progress newest")).toHaveClass("is-focused");
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("lira:move-project-board-task", { detail: { direction: "right" } }),
+      );
+    });
+
+    expect(onUpdateTask).toHaveBeenCalledWith("task-progress-2", {
+      projectLaneId: "project-1-lane-done",
+      isCompleted: true,
     });
   });
 
