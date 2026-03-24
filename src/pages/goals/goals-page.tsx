@@ -3,6 +3,7 @@ import { ArrowTurnIcon, EditIcon, TrashIcon } from "@/components/icons";
 import { Card } from "@/components/data-display/card";
 import { RightRailColumn } from "@/components/layout/right-rail-column";
 import { ThreeColumnLayout } from "@/components/layout/three-column-layout";
+import { useGoalsNavigation } from "@/lib/hooks/use-goals-navigation";
 import { ActionBar } from "@/components/actions/action-bar";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Modal } from "@/components/actions/modal";
@@ -27,6 +28,7 @@ type GoalsPageProps = {
   onUpdateGoal: (goalId: string, updates: Partial<Item>) => void;
   onDeleteGoal: (goalId: string) => void;
   onEditGoal: (goalId: string) => void;
+  onSelectTask: (taskId: string) => void;
   onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
   onDeleteTask: (taskId: string) => void;
   onNotify: (message: string) => void;
@@ -48,6 +50,7 @@ export function GoalsPage({
   onUpdateGoal,
   onDeleteGoal,
   onEditGoal,
+  onSelectTask,
   onUpdateTask,
   onDeleteTask,
   onNotify,
@@ -69,6 +72,16 @@ export function GoalsPage({
   const showInlinePeriods = layoutMode !== "wide";
   const showStackedInsights = layoutMode === "narrow";
   const showRightRail = layoutMode !== "narrow";
+
+  const { activeColumn, focusedGoalId } = useGoalsNavigation({
+    goals: filteredGoals,
+    activePeriod,
+    setActivePeriod,
+    onSelectGoal,
+    onDeleteGoal: (goal) => setPendingDeleteGoal({ id: goal.id, title: goal.title }),
+    leftCollapsed: showInlinePeriods,
+    rightCollapsed: !showRightRail,
+  });
 
   useEffect(() => {
     if (!selectedGoal) {
@@ -125,15 +138,15 @@ export function GoalsPage({
                     const projectName = getProjectName(
                       projects,
                       goal.goalScope?.projectId,
-                      "No linked project yet",
+                      "No project, just vibes",
                     );
-
 	                    return (
 	                      <Card
                         as="article"
                         key={goal.id}
-                        className={`goal-card ${selectedGoalId === goal.id ? "is-active" : ""}`}
-                        interactive
+                        className={`goal-card ${selectedGoalId === goal.id ? "is-active" : ""} ${
+                          focusedGoalId === goal.id && activeColumn === "center" ? "is-focused" : ""
+                        }`}
                         onClick={() => onSelectGoal(goal.id)}
                       >
                         <div className="goal-card__header">
@@ -143,7 +156,11 @@ export function GoalsPage({
                               <p className="goal-card__description">{goal.content}</p>
                             ) : null}
                             <p className="goal-card__meta">
-                              {projectName}
+                              {goal.goalScope?.projectId ? (
+                                <span className="goal-card__project-tag">{projectName}</span>
+                              ) : (
+                                projectName
+                              )}
                               {` • ${formatGoalMetricLabel(goal)}`}
                             </p>
                           </div>
@@ -156,61 +173,10 @@ export function GoalsPage({
 	                            goal={goal}
 	                            todayDate={todayDate}
 	                            progressContext={progressContext}
+                              onUpdateGoal={onUpdateGoal}
 	                          />
 	                        ) : null}
-	                        {progress.isOffDay ? null : progress.linkedTasks.length > 0 ? (
-	                          <div className="goal-card__linked-tasks">
-	                            {progress.linkedTasks.map((task) => (
-                              <div key={task.id} className="goal-card__linked-task">
-                                <label className="goal-card__linked-task-main">
-                                  <input
-                                    type="checkbox"
-                                    checked={task.isCompleted}
-                                    aria-label={`Complete ${task.title}`}
-                                    onChange={(event) => {
-                                      event.stopPropagation();
-                                      onUpdateTask(task.id, {
-                                        isCompleted: event.target.checked,
-                                      });
-                                    }}
-                                  />
-                                  <span className="goal-card__linked-task-mark" aria-hidden="true" />
-                                  <span className="goal-card__linked-task-title">{task.title}</span>
-                                </label>
-                                <button
-                                  type="button"
-                                  className="goal-card__delete"
-                                  aria-label={`Unlink ${task.title}`}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    onUpdateGoal(goal.id, {
-                                      goalScope: {
-                                        ...goal.goalScope,
-                                        taskIds: (goal.goalScope?.taskIds ?? []).filter(
-                                          (taskId) => taskId !== task.id,
-                                        ),
-                                      },
-                                    });
-                                  }}
-                                >
-                                  <ArrowTurnIcon className="goal-card__delete-icon" />
-                                </button>
-                                <button
-                                  type="button"
-                                  className="goal-card__delete"
-                                  aria-label={`Delete ${task.title}`}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    onDeleteTask(task.id);
-                                    onNotify(`Task "${task.title}" deleted`);
-                                  }}
-                                >
-                                  <TrashIcon className="goal-card__delete-icon" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : goal.goalMilestones?.length ? (
+	                        {progress.isOffDay ? null : goal.goalMilestones?.length ? (
                           <div className="goal-card__linked-tasks" aria-label={`${goal.title} milestones`}>
                             {goal.goalMilestones.map((milestone) => (
                               <label key={milestone.id} className="goal-card__linked-task-main goal-card__milestone">
@@ -240,7 +206,7 @@ export function GoalsPage({
                               </label>
                             ))}
                           </div>
-                        ) : progress.isDirectCompletion ? (
+                        ) : progress.isDirectCompletion && goal.goalPeriod !== "daily" ? (
                           <div className="goal-card__checklist" aria-label={`${goal.title} completion`}>
                             <button
                               type="button"
@@ -262,19 +228,52 @@ export function GoalsPage({
                               <span className="goal-card__checkbox-mark" />
                             </button>
                           </div>
-                        ) : (
+                        ) : goal.goalPeriod !== "daily" ? (
                           <div className="goal-card__linked-tasks" aria-label={`${goal.title} source`}>
                             <p className="goal-card__description">
                               {automaticGoalDescription(goal)}
                             </p>
                           </div>
-                        )}
+                        ) : null}
                         <div className="goal-card__progress-bar" aria-hidden="true">
                           <div
                             className="goal-card__progress-fill"
                             style={{ width: `${progress.progressPercent}%` }}
                           />
                         </div>
+                        {progress.isOffDay ? null : progress.linkedTasks.length > 0 ? (
+                          <div className="goal-card__linked-tasks goal-card__linked-tasks--tasks">
+                            {progress.linkedTasks.map((task) => (
+                              <div key={task.id} className="goal-card__linked-task goal-card__linked-task--row">
+                                <button
+                                  type="button"
+                                  className={`project-task-list__checkbox ${task.isCompleted ? "is-checked" : ""}`}
+                                  role="checkbox"
+                                  aria-checked={task.isCompleted}
+                                  aria-label={`Complete ${task.title}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    onUpdateTask(task.id, {
+                                      isCompleted: !task.isCompleted,
+                                    });
+                                  }}
+                                >
+                                  <span className="project-task-list__checkbox-mark" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="project-task-list__row-button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    onSelectTask(task.id);
+                                  }}
+                                >
+                                  {task.title}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                         <div className="goal-card__actions" onClick={(event) => event.stopPropagation()}>
                           <button
                             type="button"
@@ -286,7 +285,7 @@ export function GoalsPage({
                           </button>
                           <button
                             type="button"
-                            className="goal-card__delete"
+                            className="goal-card__delete goal-card__delete--goal"
                             aria-label={`Delete ${goal.title}`}
                             onClick={() => setPendingDeleteGoal({ id: goal.id, title: goal.title })}
                           >
@@ -401,6 +400,7 @@ function GoalDailyWeekStrip({
 	goal,
 	todayDate,
 	progressContext,
+  onUpdateGoal,
 }: {
 	goal: Item;
 	todayDate: string;
@@ -408,8 +408,10 @@ function GoalDailyWeekStrip({
 		items: Item[];
 		todayDate: string;
 	};
+  onUpdateGoal?: (goalId: string, updates: Partial<Item>) => void;
 }) {
 	const weekDays = getCurrentGoalWeekDays(todayDate);
+  const isDirect = !goal.goalMetric && !(goal.goalMilestones?.length);
 
 	return (
 		<div className="goal-card__week-strip" aria-label={`${goal.title} week status`}>
@@ -421,6 +423,39 @@ function GoalDailyWeekStrip({
 				))}
 				{weekDays.map((day) => {
 					const status = resolveGoalWeekDayStatus(goal, progressContext, day.date, todayDate);
+          
+          if (isDirect && status.kind !== "off-day" && onUpdateGoal) {
+            const isFuture = day.date > todayDate;
+            const isChecked = status.kind === "met";
+            
+            return (
+              <button
+                key={`${day.date}-status`}
+                type="button"
+                className={`goal-card__week-status is-interactive is-${status.kind} ${isFuture ? "is-disabled" : ""}`}
+                aria-pressed={isChecked}
+                aria-label={`${isChecked ? "Mark incomplete" : "Mark complete"} for ${day.label}`}
+                disabled={isFuture}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (isFuture) return;
+                  const nextProgress = isChecked ? 0 : 1;
+                  const progressByDate = goal.goalProgressByDate ?? {};
+                  onUpdateGoal(goal.id, {
+                    goalProgress: day.date === todayDate ? nextProgress : goal.goalProgress,
+                    goalProgressByDate: {
+                      ...progressByDate,
+                      [day.date]: nextProgress,
+                    },
+                  });
+                }}
+                style={{ cursor: isFuture ? "default" : "pointer", border: "none", padding: 0 }}
+              >
+                {status.symbol}
+              </button>
+            );
+          }
+
 					return (
 						<span
 							key={`${day.date}-status`}

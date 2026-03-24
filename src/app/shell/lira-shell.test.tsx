@@ -314,7 +314,9 @@ describe("LiraShell list shortcuts", () => {
     expect(screen.getByText("Standalone")).toBeInTheDocument();
 
     const linkedDocOption = screen.getByText("Architecture notes").closest('[role="option"]');
-    expect(linkedDocOption).not.toBeNull();
+    if (!linkedDocOption) {
+      throw new Error("Expected the linked doc option to be present in the command palette.");
+    }
     expect(
       linkedDocOption.querySelector(
         'path[d="M7 3.5h7l4 4V20.5H7a2.5 2.5 0 0 1-2.5-2.5V6A2.5 2.5 0 0 1 7 3.5Z"]',
@@ -656,8 +658,10 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Delete Review task 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Review task 1" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete task" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
 
     await waitFor(() => {
       expect(mocks.replaceWorkspaceItems).toHaveBeenCalled();

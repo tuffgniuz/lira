@@ -128,6 +128,7 @@ export function PageContent({
         onUpdateGoal={onUpdateGoal}
         onDeleteGoal={onDeleteGoal}
         onEditGoal={onEditGoal}
+        onSelectTask={onSelectTask}
         onUpdateTask={onUpdateTask}
         onDeleteTask={onDeleteTask}
         onNotify={onNotify}

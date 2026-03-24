@@ -75,6 +75,7 @@ describe("GoalsPage", () => {
         onUpdateGoal={vi.fn()}
         onDeleteGoal={vi.fn()}
         onEditGoal={vi.fn()}
+        onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
@@ -121,6 +122,7 @@ describe("GoalsPage", () => {
         onUpdateGoal={onUpdateGoal}
         onDeleteGoal={vi.fn()}
         onEditGoal={vi.fn()}
+        onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
@@ -137,10 +139,11 @@ describe("GoalsPage", () => {
     });
   });
 
-  it("lets linked goal tasks be completed, unlinked, or deleted from the goal card", () => {
+  it("lets linked goal tasks be completed, edited, or deleted from the goal card", () => {
     const onUpdateGoal = vi.fn();
     const onUpdateTask = vi.fn();
     const onDeleteTask = vi.fn();
+    const onSelectTask = vi.fn();
 
     render(
       <GoalsPage
@@ -198,6 +201,7 @@ describe("GoalsPage", () => {
         onUpdateGoal={onUpdateGoal}
         onDeleteGoal={vi.fn()}
         onEditGoal={vi.fn()}
+        onSelectTask={onSelectTask}
         onUpdateTask={onUpdateTask}
         onDeleteTask={onDeleteTask}
         onNotify={vi.fn()}
@@ -207,16 +211,10 @@ describe("GoalsPage", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Complete Review task 1" }));
     expect(onUpdateTask).toHaveBeenCalledWith("task-1", { isCompleted: true });
 
-    fireEvent.click(screen.getByRole("button", { name: "Unlink Review task 1" }));
-    expect(onUpdateGoal).toHaveBeenCalledWith("goal-1", {
-      goalScope: { taskIds: [] },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Review task 1" }));
+    expect(onSelectTask).toHaveBeenCalledWith("task-1");
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete Review task 1" }));
-    expect(onDeleteTask).toHaveBeenCalledWith("task-1");
-
-    expect(screen.queryByText("Unlink")).not.toBeInTheDocument();
-    expect(screen.queryByText("Delete")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete Review task 1" })).not.toBeInTheDocument();
   });
 
   it("does not show a quick-add button for task-metric goals", () => {
@@ -253,6 +251,7 @@ describe("GoalsPage", () => {
         onUpdateGoal={vi.fn()}
         onDeleteGoal={vi.fn()}
         onEditGoal={vi.fn()}
+        onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
@@ -286,6 +285,7 @@ describe("GoalsPage", () => {
         onUpdateGoal={vi.fn()}
         onDeleteGoal={vi.fn()}
         onEditGoal={vi.fn()}
+        onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
@@ -302,9 +302,9 @@ describe("GoalsPage", () => {
     expect(weekStripQueries.getByText("Fri")).toBeInTheDocument();
     expect(weekStripQueries.getByText("Sat")).toBeInTheDocument();
     expect(weekStripQueries.getByText("Sun")).toBeInTheDocument();
-    expect(weekStripQueries.getByLabelText("Monday status: met")).toBeInTheDocument();
-    expect(weekStripQueries.getByLabelText("Tuesday status: missed")).toBeInTheDocument();
-    expect(weekStripQueries.getByLabelText("Wednesday status: pending")).toBeInTheDocument();
+    expect(weekStripQueries.getByLabelText("Mark incomplete for Monday")).toBeInTheDocument();
+    expect(weekStripQueries.getByLabelText("Mark complete for Tuesday")).toBeInTheDocument();
+    expect(weekStripQueries.getByLabelText("Mark complete for Wednesday")).toBeInTheDocument();
     expect(weekStripQueries.getByLabelText("Saturday status: off day")).toBeInTheDocument();
   });
 
@@ -332,6 +332,7 @@ describe("GoalsPage", () => {
         onUpdateGoal={onUpdateGoal}
         onDeleteGoal={vi.fn()}
         onEditGoal={vi.fn()}
+        onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
@@ -371,6 +372,7 @@ describe("GoalsPage", () => {
         onUpdateGoal={vi.fn()}
         onDeleteGoal={vi.fn()}
         onEditGoal={vi.fn()}
+        onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
@@ -394,6 +396,7 @@ describe("GoalsPage", () => {
         onUpdateGoal={vi.fn()}
         onDeleteGoal={vi.fn()}
         onEditGoal={vi.fn()}
+        onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
@@ -418,6 +421,7 @@ describe("GoalsPage", () => {
         onUpdateGoal={vi.fn()}
         onDeleteGoal={vi.fn()}
         onEditGoal={vi.fn()}
+        onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
         onDeleteTask={vi.fn()}
         onNotify={vi.fn()}

@@ -64,7 +64,7 @@ describe("goal progress", () => {
 
     expect(progress.completedCount).toBe(1);
     expect(progress.progressDenominator).toBe(3);
-    expect(progress.linkedTasks).toHaveLength(0);
+    expect(progress.linkedTasks).toHaveLength(2);
   });
 
   it("keeps all explicitly linked tasks visible while counting only completed ones", () => {

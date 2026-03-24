@@ -28,9 +28,7 @@ export function resolveGoalProgress(
     0,
     Math.min(rawCompletedCount, getProgressDenominator(goal)),
   );
-  const linkedTasks = goal.goalScope?.taskIds?.length
-    ? getScopedTasks(goal, context.items)
-    : [];
+  const linkedTasks = getGoalTargetTasks(goal, context.items);
   const progressDenominator = isOffDay ? 0 : getProgressDenominator(goal);
 
   return {
@@ -152,6 +150,36 @@ function getMatchingTasks(goal: Item, items: Item[]) {
     }
 
     if (goal.goalScope?.tag && !item.tags.includes(goal.goalScope.tag)) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function getGoalTargetTasks(goal: Item, items: Item[]) {
+  if (goal.goalScope?.taskIds?.length) {
+    return getScopedTasks(goal, items);
+  }
+
+  if (goal.goalMetric !== "tasks_completed") {
+    return [];
+  }
+
+  return items.filter((item) => {
+    if (item.kind !== "task" || item.state === "deleted") {
+      return false;
+    }
+
+    if (goal.goalScope?.projectId && item.projectId !== goal.goalScope.projectId) {
+      return false;
+    }
+
+    if (goal.goalScope?.tag && !item.tags.includes(goal.goalScope.tag)) {
+      return false;
+    }
+
+    if (!goal.goalScope?.projectId && !goal.goalScope?.tag) {
       return false;
     }
 
