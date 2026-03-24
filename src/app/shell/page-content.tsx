@@ -1,6 +1,7 @@
 import { viewTitles } from "@/app/navigation/navigation";
 import type { ViewId } from "@/app/navigation/types";
 import { EmptyState } from "@/components/feedback/empty-state";
+import { Kbd } from "@/components/data-display/kbd";
 import { PageShell } from "@/components/layout/page-shell";
 import type { Doc } from "@/models/doc";
 import type { Item } from "@/models/workspace-item";
@@ -56,7 +57,7 @@ type PageContentProps = {
     state: Extract<Item["state"], "inbox" | "someday" | "active" | "archived">,
   ) => void;
   onDeleteCapture: (captureId: string) => void;
-  onNotify: (message: string) => void;
+  onNotify: (message: string, type?: "inform" | "success" | "warning") => void;
   taskDraftResetKeys: Record<string, number>;
   docDraftResetKeys: Record<string, number>;
 };
@@ -244,7 +245,11 @@ export function PageContent({
       >
         <EmptyState
           title="No doc is open"
-          copy="Open a doc from the docs palette or create one with the new-doc shortcut."
+          copy={
+            <>
+              Open a doc from the docs palette or create one with the <Kbd>Space</Kbd> <Kbd>n</Kbd> <Kbd>d</Kbd> shortcut.
+            </>
+          }
         />
       </PageShell>
     );

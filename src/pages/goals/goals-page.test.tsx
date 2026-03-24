@@ -380,7 +380,7 @@ describe("GoalsPage", () => {
     );
 
     expect(screen.getByTestId("goals-empty-shell")).toBeInTheDocument();
-    expect(screen.getByText("No daily goals yet")).toBeInTheDocument();
+    expect(screen.getByText("Wow, such empty")).toBeInTheDocument();
   });
 
   it("keeps goal period filters accessible when the left rail collapses on medium widths", () => {

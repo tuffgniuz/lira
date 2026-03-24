@@ -8,8 +8,8 @@ export {
   CollapseSidebarIcon,
   ColumnsIcon,
   EditIcon,
-  FolderIcon,
   FocusModeIcon,
+  FolderIcon,
   InboxIcon,
   LayersIcon,
   NoteIcon,
@@ -20,4 +20,7 @@ export {
   TargetIcon,
   TrashIcon,
   UserIcon,
+  InfoIcon,
+  CheckCircleIcon,
+  AlertTriangleIcon,
 } from "./icons";

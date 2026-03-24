@@ -447,7 +447,7 @@ describe("LiraShell list shortcuts", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
 
-    expect(await screen.findByText("No tasks match this view")).toBeInTheDocument();
+    expect(await screen.findByText("Wow, such empty")).toBeInTheDocument();
     expect(screen.queryByText("Design the first task workspace layout")).not.toBeInTheDocument();
   });
 

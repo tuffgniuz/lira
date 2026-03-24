@@ -59,7 +59,8 @@ Lira is built around my personal workflow, but anyone can use it. Just expect th
 | | `Enter` | Opens the highlighted task |
 | **Task detail page** | `Esc` | Closes the page when the editor is in normal mode |
 | | `Shift+H` / `Shift+L` | Works in normal mode for history navigation |
-| **Projects page (List)** | `n` | Creates a new task |
+| **Projects page (List)** | `Space p d` | Opens a palette listing docs linked to the current project |
+| | `n` | Creates a new task |
 | | `x` | Toggles the completion status of the highlighted task |
 | | `d` (twice) | Deletes the highlighted task |
 | | `1` | Filters the list to show "To do" tasks |
@@ -85,12 +86,13 @@ Lira currently uses a vault-based storage model.
 - a vault is a user-selected directory
 - if the selected vault path does not exist, Lira creates it
 - `~` paths such as `~/Documents/lira` are supported
+- the primary database is stored as `lira.sqlite3` in the root of your vault
 - captured inbox items are currently stored in `.inbox/inbox.json` inside the vault
 
 Example:
 
 ```text
-/home/your-user/Documents/lira/.inbox/inbox.json
+/home/your-user/Documents/lira/lira.sqlite3
 ```
 
 ## Local Development

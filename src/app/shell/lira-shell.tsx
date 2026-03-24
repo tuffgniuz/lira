@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { CommandPalette } from "@/components/navigation/command-palette";
 import type { CommandPaletteItem } from "@/components/navigation/command-palette";
@@ -10,6 +10,9 @@ import {
   NoteIcon,
   SettingsIcon,
   SparkIcon,
+  InfoIcon,
+  CheckCircleIcon,
+  AlertTriangleIcon,
 } from "@/components/icons";
 import type { ViewId } from "@/app/navigation/types";
 import {
@@ -19,7 +22,7 @@ import {
 } from "@/app/navigation/navigation";
 import {
   leaderKey, listGoalsSequence, listInboxItemsSequence, listProjectsSequence,
-  listTasksSequence, listDocsSequence, mappedSequences, newDocSequence,
+  listTasksSequence, listDocsSequence, listProjectDocsSequence, mappedSequences, newDocSequence,
   newGoalSequence, newInboxItemSequence, newProjectSequence, newTaskSequence,
   normalizeMappedKey, pageSequence, sequenceStartsWith,
 } from "@/app/navigation/keymappings";
@@ -206,7 +209,7 @@ function isTypingTarget(target: EventTarget | null) {
   );
 }
 
-type ListPaletteKind = "projects" | "tasks" | "goals" | "inbox" | "docs";
+type ListPaletteKind = "projects" | "tasks" | "goals" | "inbox" | "docs" | "project-docs";
 type NavigationLocation = {
   view: ViewId;
   selectedProjectId: string;
@@ -274,7 +277,21 @@ export function LiraShell() {
   const [selectedDocId, setSelectedDocId] = useState("");
   const [taskDraftResetKeys, setTaskDraftResetKeys] = useState<Record<string, number>>({});
   const [docDraftResetKeys, setDocDraftResetKeys] = useState<Record<string, number>>({});
-  const [toastMessage, setToastMessage] = useState("");
+  const [toastNotification, setToastNotification] = useState<{
+    message: string;
+    type: "inform" | "success" | "warning";
+  } | null>(null);
+
+  const setToastMessage = useCallback(
+    (message: string, type: "inform" | "success" | "warning" = "inform") => {
+      if (!message) {
+        setToastNotification(null);
+      } else {
+        setToastNotification({ message, type });
+      }
+    },
+    [],
+  );
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [listPaletteKind, setListPaletteKind] = useState<ListPaletteKind | null>(null);
   const [commandLauncherOpen, setCommandLauncherOpen] = useState(false);
@@ -352,6 +369,19 @@ export function LiraShell() {
     ],
     icon: <NoteIcon className="nav-icon" />,
   }));
+  const projectDocItems: CommandPaletteItem[] = docs
+    .filter((doc) => doc.projectId === selectedProjectId)
+    .map((doc) => ({
+      id: doc.id,
+      label: doc.title,
+      meta: getProjectName(projects, doc.projectId, "") || "Standalone",
+      keywords: [
+        doc.body.toLowerCase(),
+        "doc",
+        "document",
+      ],
+      icon: <NoteIcon className="nav-icon" />,
+    }));
   const pendingTheme = themes.find((theme) => theme.id === pendingThemeId) ?? themes[0];
   const accentOptions = Object.entries(pendingTheme.colors).map(([token, color]) => ({
     id: token as ThemeColorToken,
@@ -396,7 +426,14 @@ export function LiraShell() {
                   emptyMessage: "No docs match that query.",
                   items: docItems,
                 }
-            : null;
+              : listPaletteKind === "project-docs"
+                ? {
+                    title: "Project Docs",
+                    placeholder: "list project docs",
+                    emptyMessage: "No docs match that query.",
+                    items: projectDocItems,
+                  }
+              : null;
 
   const commandItems: CommandPaletteItem[] = [
     {
@@ -452,7 +489,7 @@ export function LiraShell() {
     },
   ) {
     if (!vaultPath || loadedItemVaultPath !== vaultPath) {
-      setToastMessage("Failed to save workspace changes: vault is not ready");
+      setToastMessage("Failed to save workspace changes: vault is not ready", "warning");
       options?.onFailure?.();
       return false;
     }
@@ -475,7 +512,7 @@ export function LiraShell() {
       options?.onSuccess?.(nextItems);
       return true;
     } catch (error) {
-      setToastMessage(formatPersistenceError("save workspace changes", error));
+      setToastMessage(formatPersistenceError("save workspace changes", error), "warning");
       options?.onFailure?.();
       return false;
     }
@@ -490,7 +527,7 @@ export function LiraShell() {
     },
   ) {
     if (!vaultPath || loadedProjectVaultPath !== vaultPath) {
-      setToastMessage("Failed to save projects: vault is not ready");
+      setToastMessage("Failed to save projects: vault is not ready", "warning");
       options?.onFailure?.();
       return false;
     }
@@ -513,7 +550,7 @@ export function LiraShell() {
       options?.onSuccess?.(nextProjects);
       return true;
     } catch (error) {
-      setToastMessage(formatPersistenceError("save projects", error));
+      setToastMessage(formatPersistenceError("save projects", error), "warning");
       options?.onFailure?.();
       return false;
     }
@@ -542,18 +579,18 @@ export function LiraShell() {
   }, [projects, selectedProjectId]);
 
   useEffect(() => {
-    if (!toastMessage) {
+    if (!toastNotification) {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
-      setToastMessage("");
-    }, 2200);
+      setToastNotification(null);
+    }, 5000);
 
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [toastMessage]);
+  }, [toastNotification]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -794,6 +831,17 @@ export function LiraShell() {
       if (nextSequence.join("") === listDocsSequence.join("")) {
         event.preventDefault();
         openListPalette("docs");
+        clearKeySequence();
+        return;
+      }
+
+      if (
+        activeView === "projects" &&
+        selectedProjectId &&
+        nextSequence.join("") === listProjectDocsSequence.join("")
+      ) {
+        event.preventDefault();
+        openListPalette("project-docs");
         clearKeySequence();
         return;
       }
@@ -1228,7 +1276,7 @@ export function LiraShell() {
   }
 
   function openListPalette(kind: ListPaletteKind) {
-    if (kind === "docs" && loadedDocVaultPath !== vaultPath) {
+    if ((kind === "docs" || kind === "project-docs") && loadedDocVaultPath !== vaultPath) {
       setListPaletteKind(kind);
       return;
     }
@@ -1239,6 +1287,7 @@ export function LiraShell() {
       goals: { count: goalItems.length, emptyMessage: "No goals yet." },
       inbox: { count: inboxItems.length, emptyMessage: "No inbox items yet." },
       docs: { count: docItems.length, emptyMessage: "No docs yet." },
+      "project-docs": { count: projectDocItems.length, emptyMessage: "No docs linked to this project yet." },
     } satisfies Record<ListPaletteKind, { count: number; emptyMessage: string }>;
 
     const config = configs[kind];
@@ -1315,7 +1364,7 @@ export function LiraShell() {
     try {
       await saveProfile(resolvedVaultPath, nextProfile);
     } catch (error) {
-      setToastMessage(formatPersistenceError("save profile", error));
+      setToastMessage(formatPersistenceError("save profile", error), "warning");
       return;
     }
 
@@ -1363,7 +1412,7 @@ export function LiraShell() {
       navigateToInboxItem(item.id);
     }
 
-    if (listPaletteKind === "docs") {
+    if (listPaletteKind === "docs" || listPaletteKind === "project-docs") {
       navigateToDoc(item.id);
     }
 
@@ -1517,7 +1566,7 @@ export function LiraShell() {
     openDetailOnSuccess?: boolean;
   }) {
     if (!vaultPath || loadedDocVaultPath !== vaultPath) {
-      setToastMessage("Failed to save docs: vault is not ready");
+      setToastMessage("Failed to save docs: vault is not ready", "warning");
       return;
     }
 
@@ -1535,7 +1584,7 @@ export function LiraShell() {
       .then((savedDoc) => {
         docMutationVersionRef.current += 1;
         setDocs((current) => [savedDoc, ...current]);
-        setToastMessage("Doc saved to vault.");
+        setToastMessage("Doc saved to vault.", "success");
         setNewDocOpen(false);
 
         if (doc.openDetailOnSuccess !== false) {
@@ -1543,7 +1592,7 @@ export function LiraShell() {
         }
       })
       .catch((error) => {
-        setToastMessage(formatPersistenceError("save doc", error));
+        setToastMessage(formatPersistenceError("save doc", error), "warning");
       });
   }
 
@@ -1746,7 +1795,7 @@ export function LiraShell() {
 
   function handleUpdateTask(taskId: string, updates: Partial<Item>) {
     if (!vaultPath || loadedItemVaultPath !== vaultPath) {
-      setToastMessage("Failed to save workspace changes: vault is not ready");
+      setToastMessage("Failed to save workspace changes: vault is not ready", "warning");
       return;
     }
 
@@ -1802,13 +1851,13 @@ export function LiraShell() {
         [taskId]: (current[taskId] ?? 0) + 1,
       }));
 
-      setToastMessage(formatPersistenceError("save task", error));
+      setToastMessage(formatPersistenceError("save task", error), "warning");
     });
   }
 
   function handleUpdateDoc(docId: string, updates: Partial<Doc>) {
     if (!vaultPath || loadedDocVaultPath !== vaultPath) {
-      setToastMessage("Failed to save docs: vault is not ready");
+      setToastMessage("Failed to save docs: vault is not ready", "warning");
       return;
     }
 
@@ -1847,7 +1896,7 @@ export function LiraShell() {
         ...current,
         [docId]: (current[docId] ?? 0) + 1,
       }));
-      setToastMessage(formatPersistenceError("save doc", error));
+      setToastMessage(formatPersistenceError("save doc", error), "warning");
     });
   }
 
@@ -2042,7 +2091,7 @@ export function LiraShell() {
 
   function handleDeleteDoc(docId: string) {
     if (!vaultPath || loadedDocVaultPath !== vaultPath) {
-      setToastMessage("Failed to save docs: vault is not ready");
+      setToastMessage("Failed to save docs: vault is not ready", "warning");
       return;
     }
 
@@ -2064,7 +2113,7 @@ export function LiraShell() {
         }
       })
       .catch((error) => {
-        setToastMessage(formatPersistenceError("delete doc", error));
+        setToastMessage(formatPersistenceError("delete doc", error), "warning");
       });
   }
 
@@ -2237,9 +2286,20 @@ export function LiraShell() {
         </div>
       ) : null}
 
-      {toastMessage ? (
-        <div className="app-toast" role="status" aria-live="polite">
-          {toastMessage}
+      {toastNotification ? (
+        <div
+          className={`app-toast app-toast--${toastNotification.type}`}
+          role="status"
+          aria-live="polite"
+        >
+          {toastNotification.type === "inform" ? (
+            <InfoIcon className="app-toast__icon" />
+          ) : toastNotification.type === "success" ? (
+            <CheckCircleIcon className="app-toast__icon" />
+          ) : (
+            <AlertTriangleIcon className="app-toast__icon" />
+          )}
+          <span>{toastNotification.message}</span>
         </div>
       ) : null}
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionBar } from "@/components/actions/action-bar";
 import { EmptyState } from "@/components/feedback/empty-state";
+import { Kbd } from "@/components/data-display/kbd";
 import { Modal } from "@/components/actions/modal";
 import { PageShell } from "@/components/layout/page-shell";
 import { formatRelativeTimestamp } from "@/lib/utils/format-relative-timestamp";
@@ -55,7 +56,7 @@ export function CaptureInboxPage({
   onConvertCaptureToGoal: (captureId: string, projectId?: string) => void;
   onUpdateCaptureState: (captureId: string, state: InboxCaptureState) => void;
   onDeleteCapture: (captureId: string) => void;
-  onNotify: (message: string) => void;
+  onNotify: (message: string, type?: "inform" | "success" | "warning") => void;
 }) {
   const [activeFilter, setActiveFilter] = useState<"all" | InboxCaptureState>("inbox");
   const [activeCaptureId, setActiveCaptureId] = useState("");
@@ -490,15 +491,19 @@ function emptyTitleForFilter(filter: "all" | InboxCaptureState) {
     case "archived":
       return "No archived captures";
     case "all":
-      return "No captures yet";
+      return "Wow, such empty";
     default:
-      return "No captured thoughts yet";
+      return "Wow, such empty";
   }
 }
 
 function emptyCopyForFilter(filter: "all" | InboxCaptureState) {
   if (filter === "inbox") {
-    return "Use `n i` to capture something from anywhere in the app.";
+    return (
+      <>
+        Use <Kbd>n</Kbd> <Kbd>i</Kbd> to capture something from anywhere in the app.
+      </>
+    );
   }
 
   if (filter === "someday") {

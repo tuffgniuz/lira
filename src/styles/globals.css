@@ -311,12 +311,61 @@ button:focus-visible {
   bottom: 1.5rem;
   z-index: 45;
   max-width: 360px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   padding: 0.8rem 0.9rem;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--color-success) 16%, var(--color-panel-bg));
+  border-left: 4px solid transparent;
   color: var(--color-text-primary);
   font-size: 0.88rem;
   line-height: 1.4;
+}
+
+.app-toast__icon {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: 0 0 auto;
+}
+
+.app-toast--inform {
+  background: color-mix(in srgb, var(--color-accent) 15%, var(--color-panel-bg));
+  border-left-color: var(--color-accent);
+}
+.app-toast--inform .app-toast__icon {
+  color: var(--color-accent);
+}
+
+.app-toast--success {
+  background: color-mix(in srgb, var(--color-success) 16%, var(--color-panel-bg));
+  border-left-color: var(--color-success);
+}
+.app-toast--success .app-toast__icon {
+  color: var(--color-success);
+}
+
+.app-toast--warning {
+  background: color-mix(in srgb, var(--color-error) 16%, var(--color-panel-bg));
+  border-left-color: var(--color-error);
+}
+.app-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4em;
+  height: 1.4em;
+  padding: 0 0.35em;
+  font-family: inherit;
+  font-size: 0.82em;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-text-primary);
+  background: var(--color-surface-elevated-hover);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 0 var(--color-border-strong);
+  margin: 0 0.15em;
+  vertical-align: baseline;
 }
 
 .page {
@@ -492,7 +541,6 @@ button:focus-visible {
 .three-column-layout__side--left {
   padding-right: 1rem;
 }
-}
 
 .three-column-layout__side--right {
   padding-left: 1rem;
@@ -632,7 +680,8 @@ button:focus-visible {
 }
 
 .right-rail__goal-week-status {
-  min-height: 1.2rem;
+  width: 1.25rem;
+  height: 1.25rem;
   font-size: 0.74rem;
 }
 
@@ -778,7 +827,7 @@ button:focus-visible {
 }
 
 .goals-insights {
-  padding-right: 0.9rem;
+  padding: 0 1.25rem 1.25rem;
 }
 
 .goals-insights__section {
@@ -2380,14 +2429,14 @@ button:focus-visible {
 .task-detail-page__title {
   margin: 0;
   font-size: clamp(2rem, 4vw, 3.1rem);
-  line-height: 0.98;
+  line-height: 1.1;
   letter-spacing: -0.05em;
 }
 
 .task-detail-page__title-input {
   width: 100%;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0.15rem;
   border: none;
   background: transparent;
   color: inherit;

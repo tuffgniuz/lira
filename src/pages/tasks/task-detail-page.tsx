@@ -26,7 +26,7 @@ type TaskDetailPageProps = {
   onBack: () => void;
   onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
   onDeleteTask: (taskId: string) => void;
-  onNotify: (message: string) => void;
+  onNotify: (message: string, type?: "inform" | "success" | "warning") => void;
   eyebrow?: string;
   backLabel?: string;
   draftResetKey?: number;

@@ -3,7 +3,6 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const APP_DIR_NAME: &str = ".lira";
 const APP_DB_NAME: &str = "lira.sqlite3";
 
 pub fn initialize_vault(path: &str) -> Result<String, String> {
@@ -13,15 +12,6 @@ pub fn initialize_vault(path: &str) -> Result<String, String> {
         format!(
             "Failed to create vault directory at {}: {}",
             resolved.display(),
-            error
-        )
-    })?;
-
-    let db_dir = resolved.join(APP_DIR_NAME);
-    fs::create_dir_all(&db_dir).map_err(|error| {
-        format!(
-            "Failed to create SQLite directory at {}: {}",
-            db_dir.display(),
             error
         )
     })?;
@@ -40,7 +30,17 @@ pub fn open_database_from_input(path: &str) -> Result<Database, String> {
 }
 
 pub fn open_database(vault_path: &Path) -> Result<Database, String> {
-    let db_path = vault_path.join(APP_DIR_NAME).join(APP_DB_NAME);
+    let db_path = vault_path.join(APP_DB_NAME);
+
+    if let Some(parent) = db_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "Failed to prepare vault directory at {}: {}",
+                parent.display(),
+                error
+            )
+        })?;
+    }
 
     migrate_legacy_database_if_needed(vault_path, &db_path)?;
 
@@ -78,16 +78,6 @@ fn migrate_legacy_database_if_needed(vault_path: &Path, db_path: &Path) -> Resul
         return Ok(());
     };
 
-    if let Some(parent) = db_path.parent() {
-        fs::create_dir_all(parent).map_err(|error| {
-            format!(
-                "Failed to prepare SQLite directory at {}: {}",
-                parent.display(),
-                error
-            )
-        })?;
-    }
-
     fs::rename(&legacy_db_path, db_path).map_err(|error| {
         format!(
             "Failed to migrate legacy SQLite database from {} to {}: {}",
@@ -116,7 +106,7 @@ fn find_legacy_database_path(vault_path: &Path) -> Result<Option<PathBuf>, Strin
             continue;
         };
 
-        if !path.is_dir() || !file_name.starts_with('.') || file_name == APP_DIR_NAME {
+        if !path.is_dir() || !file_name.starts_with('.') || file_name == ".lira" {
             continue;
         }
 

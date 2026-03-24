@@ -4,6 +4,7 @@ import { flushSync } from "react-dom";
 import { ActionBar } from "@/components/actions/action-bar";
 import { CheckIcon, EditIcon } from "@/components/icons";
 import { EmptyState } from "@/components/feedback/empty-state";
+import { Kbd } from "@/components/data-display/kbd";
 import { FormField } from "@/components/data-input/form-field";
 import { Modal } from "@/components/actions/modal";
 import { RightRailColumn } from "@/components/layout/right-rail-column";
@@ -32,7 +33,7 @@ type ProjectsPageProps = {
   ) => void | boolean | Promise<void | boolean>;
   onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
   onDeleteTask: (taskId: string) => void;
-  onNotify: (message: string) => void;
+  onNotify: (message: string, type?: "inform" | "success" | "warning") => void;
   onCreateTask: (task: {
     title: string;
     description: string;
@@ -682,7 +683,11 @@ export function ProjectsPage({
         className="projects-empty"
         badge="Projects"
         title="No projects yet"
-        copy="Use `Space n p` to create your first project."
+        copy={
+          <>
+            Use <Kbd>Space</Kbd> <Kbd>n</Kbd> <Kbd>p</Kbd> to create your first project.
+          </>
+        }
       />
     );
   }
@@ -1139,12 +1144,26 @@ export function ProjectsPage({
               </header>
 
               <div className="project-task-list-wrap">
-                <table
-                  ref={listTableRef}
-                  className="project-task-list"
-                  aria-label="Project tasks"
-                  tabIndex={0}
-                >
+                {projectListRows.length === 0 && !listDraftOpen ? (
+                  <div className="goals-empty-shell">
+                    <EmptyState
+                      className="projects-empty"
+                      badge="Tasks"
+                      title="Wow, such empty"
+                      copy={
+                        <>
+                          A clear list is a clear mind. Or maybe you just need to change the filter. Press <Kbd>n</Kbd> to add a task.
+                        </>
+                      }
+                    />
+                  </div>
+                ) : (
+                  <table
+                    ref={listTableRef}
+                    className="project-task-list"
+                    aria-label="Project tasks"
+                    tabIndex={0}
+                  >
                   <thead>
                     <tr>
                       <th scope="col">Task</th>
@@ -1238,7 +1257,8 @@ export function ProjectsPage({
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                  </table>
+                )}
               </div>
             </div>
           }

@@ -6,6 +6,7 @@ import { ThreeColumnLayout } from "@/components/layout/three-column-layout";
 import { useGoalsNavigation } from "@/lib/hooks/use-goals-navigation";
 import { ActionBar } from "@/components/actions/action-bar";
 import { EmptyState } from "@/components/feedback/empty-state";
+import { Kbd } from "@/components/data-display/kbd";
 import { Modal } from "@/components/actions/modal";
 import { PageShell } from "@/components/layout/page-shell";
 import { useWindowWidth } from "@/lib/hooks/use-window-width";
@@ -31,7 +32,7 @@ type GoalsPageProps = {
   onSelectTask: (taskId: string) => void;
   onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
   onDeleteTask: (taskId: string) => void;
-  onNotify: (message: string) => void;
+  onNotify: (message: string, type?: "inform" | "success" | "warning") => void;
 };
 
 const periodOptions: Array<{ id: GoalPeriod; label: string }> = [
@@ -311,8 +312,12 @@ export function GoalsPage({
                   <EmptyState
                     className="goals-empty"
                     badge="Goals"
-                    title={`No ${activePeriod} goals yet`}
-                    copy="Create a goal to give this period a target."
+                    title="Wow, such empty"
+                    copy={
+                      <>
+                        You haven't set any {activePeriod} goals yet. Press <Kbd>Space</Kbd> <Kbd>n</Kbd> <Kbd>g</Kbd> to dream big!
+                      </>
+                    }
                   />
                 </div>
               </div>

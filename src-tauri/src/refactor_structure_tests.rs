@@ -46,7 +46,7 @@ fn exposes_refactored_backend_modules_for_commands_and_transport_types() {
 }
 
 #[test]
-fn migrates_an_existing_hidden_app_database_into_the_lira_layout() {
+fn migrates_an_existing_hidden_app_database_into_the_root_layout() {
     let vault_dir = tempdir().expect("temporary vault should initialize");
     let hidden_app_dir = vault_dir.path().join(".archive");
     std::fs::create_dir_all(&hidden_app_dir).expect("hidden app directory should be created");
@@ -55,8 +55,8 @@ fn migrates_an_existing_hidden_app_database_into_the_lira_layout() {
     crate::persistence::database::Database::open(&legacy_db_path)
         .expect("legacy app database should initialize");
 
-    open_database(vault_dir.path()).expect("database should open through the lira layout");
+    open_database(vault_dir.path()).expect("database should open through the root layout");
 
-    assert!(vault_dir.path().join(".lira").join("lira.sqlite3").exists());
+    assert!(vault_dir.path().join("lira.sqlite3").exists());
     assert!(!legacy_db_path.exists());
 }

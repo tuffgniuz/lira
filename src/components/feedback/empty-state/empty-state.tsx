@@ -9,7 +9,7 @@ export function EmptyState({
   action,
 }: {
   title: string;
-  copy: string;
+  copy: ReactNode;
   badge?: string;
   className?: string;
   action?: ReactNode;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionBar } from "@/components/actions/action-bar";
 import { EmptyState } from "@/components/feedback/empty-state";
+import { Kbd } from "@/components/data-display/kbd";
 import { Modal } from "@/components/actions/modal";
 import { PageShell } from "@/components/layout/page-shell";
 import type { Item } from "@/models/workspace-item";
@@ -12,7 +13,7 @@ type TasksPageProps = {
   projects: Project[];
   onSelectTask: (taskId: string) => void;
   onDeleteTask: (taskId: string) => void;
-  onNotify: (message: string) => void;
+  onNotify: (message: string, type?: "inform" | "success" | "warning") => void;
 };
 
 const filterItems: Array<{ id: "open" | "completed" | "all"; label: string }> = [
@@ -320,8 +321,12 @@ export function TasksPage({
         <EmptyState
           className="tasks-empty"
           badge="Tasks"
-          title="No tasks match this view"
-          copy="Change the filter to bring tasks back into focus."
+          title="Wow, such empty"
+          copy={
+            <>
+              A clear list is a clear mind. Use <Kbd>j</Kbd> and <Kbd>k</Kbd> to navigate when you have tasks.
+            </>
+          }
         />
       )}
 
