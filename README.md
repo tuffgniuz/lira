@@ -33,6 +33,10 @@ Lira is built around my personal workflow, but anyone can use it. Just expect th
 | | `Esc` | Closes the active modal or palette |
 | | `Shift+H` | Moves backward through navigation history |
 | | `Shift+L` | Moves forward through navigation history |
+| | `Space u r` | Cycles the right rail between auto/pinned/hidden states |
+| | `Space u p` | Pins the right rail to stay visible |
+| | `Space u h` | Hides the right rail on responsive pages |
+| | `Space u a` | Lets the right rail auto-show based on width |
 | **Leader sequences** | `Space g t p` | Opens the `Go To Page` palette |
 | | `Space l p` | Opens the `Projects` palette |
 | | `Space l t` | Opens the `Tasks` palette |
@@ -75,10 +79,14 @@ Lira is built around my personal workflow, but anyone can use it. Just expect th
 | | `Enter` | Opens the focused task |
 | | `Shift+H` | Moves the selected task card to the lane on the left |
 | | `Shift+L` | Moves the selected task card to the lane on the right |
+| **Editor** | `Alt + Z` | Centers the current line in the view (works in Insert & Normal) |
+| | `z z` | Centers the current line in the view (Normal mode) |
 | **Modal submit** | `Enter` | Submits `New Task`, `New Goal`, `New Project` (single-line inputs/selects) |
 | | `Ctrl+Enter` / `Cmd+Enter` | Submits `New Task`, `New Goal` (textarea) |
 | | `Enter` | Submits `New Project` (description textarea) |
 | | `Shift+Enter` | Inserts a newline in `New Project` description textarea |
+
+The dashboard always pins the right rail so momentum insights stay visible, while other pages follow the leader-controlled mode you set above.
 
 ## Vault Storage
 Lira currently uses a vault-based storage model.
