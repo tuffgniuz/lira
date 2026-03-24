@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowTurnIcon, EditIcon, TrashIcon } from "@/components/icons";
+import { EditIcon, TrashIcon } from "@/components/icons";
 import { Card } from "@/components/data-display/card";
 import { RightRailColumn } from "@/components/layout/right-rail-column";
 import { ThreeColumnLayout } from "@/components/layout/three-column-layout";
@@ -31,7 +31,6 @@ type GoalsPageProps = {
   onEditGoal: (goalId: string) => void;
   onSelectTask: (taskId: string) => void;
   onUpdateTask: (taskId: string, updates: Partial<Item>) => void;
-  onDeleteTask: (taskId: string) => void;
   onNotify: (message: string, type?: "inform" | "success" | "warning") => void;
 };
 
@@ -53,7 +52,6 @@ export function GoalsPage({
   onEditGoal,
   onSelectTask,
   onUpdateTask,
-  onDeleteTask,
   onNotify,
 }: GoalsPageProps) {
   const windowWidth = useWindowWidth();

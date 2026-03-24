@@ -119,7 +119,3 @@ Create a production frontend build:
 ```bash
 pnpm build
 ```
-
-## Notes
-- The app is local-first, but the vault model is intended to remain compatible with future sync workflows.
-- Themes are token-based so additional built-in or user-defined themes can be added later without rewriting component styles.

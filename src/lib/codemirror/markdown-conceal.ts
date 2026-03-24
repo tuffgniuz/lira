@@ -142,21 +142,23 @@ function concealDecorations(view: EditorView) {
   return Decoration.set(widgets, true);
 }
 
-export const markdownConceal = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
+export function markdownConceal() {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
 
-    constructor(view: EditorView) {
-      this.decorations = concealDecorations(view);
-    }
-
-    update(update: ViewUpdate) {
-      if (update.docChanged || update.viewportChanged || update.selectionSet) {
-        this.decorations = concealDecorations(update.view);
+      constructor(view: EditorView) {
+        this.decorations = concealDecorations(view);
       }
-    }
-  },
-  {
-    decorations: (instance) => instance.decorations,
-  },
-);
+
+      update(update: ViewUpdate) {
+        if (update.docChanged || update.viewportChanged || update.selectionSet) {
+          this.decorations = concealDecorations(update.view);
+        }
+      }
+    },
+    {
+      decorations: (instance) => instance.decorations,
+    },
+  );
+}

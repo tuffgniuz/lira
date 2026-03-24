@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Vim, getCM } from "@replit/codemirror-vim";
 import type { EditorView } from "@codemirror/view";
 
-export type TaskDescriptionVimMode = "insert" | "normal" | "visual";
+export type VimMode = "insert" | "normal" | "visual";
 
 function getVimEditor(view: EditorView) {
   return getCM(view) as {
@@ -12,7 +12,7 @@ function getVimEditor(view: EditorView) {
   };
 }
 
-function normalizeVimMode(mode?: string, insertMode = false): TaskDescriptionVimMode {
+function normalizeVimMode(mode?: string, insertMode = false): VimMode {
   if (mode?.startsWith("visual")) {
     return "visual";
   }
@@ -26,7 +26,7 @@ function normalizeVimMode(mode?: string, insertMode = false): TaskDescriptionVim
 
 function syncVimModeAttribute(
   view: EditorView,
-  setVimMode: (mode: TaskDescriptionVimMode) => void,
+  setVimMode: (mode: VimMode) => void,
 ) {
   const cm = getVimEditor(view);
   const vimMode = normalizeVimMode(undefined, cm.state?.vim?.insertMode);
@@ -36,7 +36,7 @@ function syncVimModeAttribute(
 
 function attachVimModeTracking(
   view: EditorView,
-  setVimMode: (mode: TaskDescriptionVimMode) => void,
+  setVimMode: (mode: VimMode) => void,
 ) {
   const cm = getVimEditor(view);
   const handleModeChange = (event: { mode?: string }) => {
@@ -60,7 +60,7 @@ function attachVimModeTracking(
 
 function focusEditorInInsertMode(
   view: EditorView,
-  setVimMode: (mode: TaskDescriptionVimMode) => void,
+  setVimMode: (mode: VimMode) => void,
 ) {
   view.focus();
 
@@ -76,10 +76,10 @@ function focusEditorInInsertMode(
   syncVimModeAttribute(view, setVimMode);
 }
 
-export function useTaskDescriptionEditor(focusKey: string) {
+export function useVimEditor(focusKey: string) {
   const editorViewRef = useRef<EditorView | null>(null);
   const vimModeCleanupRef = useRef<(() => void) | null>(null);
-  const [vimMode, setVimMode] = useState<TaskDescriptionVimMode>("insert");
+  const [vimMode, setVimMode] = useState<VimMode>("insert");
 
   useEffect(() => {
     return () => {
@@ -101,6 +101,18 @@ export function useTaskDescriptionEditor(focusKey: string) {
     vimModeCleanupRef.current?.();
     vimModeCleanupRef.current = attachVimModeTracking(view, setVimMode);
     focusEditorInInsertMode(view, setVimMode);
+
+    view.dom.addEventListener("keydown", (event: KeyboardEvent) => {
+      if (event.key === "Enter" && event.shiftKey) {
+        const scroller = view.scrollDOM;
+        if (scroller) {
+          scroller.scrollBy({
+            top: window.innerHeight * 0.35,
+            behavior: "smooth",
+          });
+        }
+      }
+    });
   }
 
   function handleEditorUpdate(view: EditorView) {

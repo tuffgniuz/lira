@@ -68,7 +68,8 @@ button:focus-visible {
 .app-shell {
   display: grid;
   grid-template-columns: auto 1fr;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background:
     radial-gradient(
       circle at top left,
@@ -88,6 +89,7 @@ button:focus-visible {
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem 0.5rem;
+  height: 100%;
   background: linear-gradient(180deg, var(--color-sidebar-surface), var(--color-sidebar-bg));
   border-right: 1px solid color-mix(in srgb, var(--color-text-muted) 18%, transparent);
   transition:
@@ -277,7 +279,8 @@ button:focus-visible {
   --main-panel-padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
   padding: 1rem;
   background:
     var(--color-main-bg);
@@ -2518,7 +2521,7 @@ button:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--color-accent) 28%, transparent);
 }
 
-.task-description-editor {
+.vim-editor {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
@@ -2527,7 +2530,7 @@ button:focus-visible {
   min-height: 0;
 }
 
-.task-description-editor__label {
+.vim-editor__label {
   margin: 0;
   color: var(--color-text-muted);
   font-size: 0.74rem;
@@ -2535,66 +2538,81 @@ button:focus-visible {
   text-transform: uppercase;
 }
 
-.task-description-editor__surface {
+.vim-editor__surface {
   flex: 1;
   min-height: 0;
   border: none;
   box-shadow: none;
 }
 
-.task-description-editor__surface .cm-editor {
+.vim-editor__surface .cm-editor {
   background: transparent;
   border: none;
   outline: none;
   box-shadow: none;
 }
 
-.task-description-editor__surface .cm-scroller {
+.vim-editor__surface .cm-scroller {
   overflow: auto;
 }
 
-.task-description-editor__status {
+.vim-editor__surface .cm-content {
+  padding-bottom: 75vh !important;
+}
+
+.vim-editor__status {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.8rem;
-  position: sticky;
-  bottom: 0;
-  width: 100%;
-  margin-top: auto;
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(100vw - var(--layout-rail-width) - 4rem), 44rem);
+  margin-top: 0;
   padding: 0.42rem 0.48rem;
   border-radius: 0.7rem;
-  background: color-mix(in srgb, var(--color-surface-elevated) 72%, transparent 28%);
+  background: color-mix(in srgb, var(--color-surface-elevated) 72%, var(--color-main-bg) 28%);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
   color: var(--color-text-muted);
   font-family: "Recursive Variable", "JetBrains Mono", monospace;
   font-size: 0.72rem;
   font-variation-settings: "MONO" 1, "CASL" 0.25;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  z-index: 100;
 }
 
-.task-description-editor__status-mode,
-.task-description-editor__status-counts {
+@media (max-width: 900px) {
+  .vim-editor__status {
+    width: calc(100vw - 72px - 2rem);
+  }
+}
+
+.vim-editor__status-mode,
+.vim-editor__status-counts {
   display: inline-flex;
   align-items: center;
   white-space: nowrap;
 }
 
-.task-description-editor__status-mode {
+.vim-editor__status-mode {
   padding: 0.34rem 0.5rem;
   border-radius: 0.48rem;
   color: var(--color-text-primary);
 }
 
-.task-description-editor__status-mode[data-mode="insert"] {
+.vim-editor__status-mode[data-mode="insert"] {
   background: color-mix(in srgb, var(--color-accent) 24%, transparent 76%);
 }
 
-.task-description-editor__status-mode[data-mode="normal"] {
+.vim-editor__status-mode[data-mode="normal"] {
   background: color-mix(in srgb, var(--color-panel-muted) 88%, black 12%);
 }
 
-.task-description-editor__status-mode[data-mode="visual"] {
+.vim-editor__status-mode[data-mode="visual"] {
   background: color-mix(in srgb, var(--color-warning) 18%, transparent 82%);
 }
 

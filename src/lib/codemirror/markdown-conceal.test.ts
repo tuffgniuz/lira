@@ -4,9 +4,9 @@ import { EditorView } from "@codemirror/view";
 import { markdown } from "@codemirror/lang-markdown";
 import { markdownConceal } from "./markdown-conceal";
 import {
-  taskDescriptionCodeLanguages,
-  taskDescriptionHighlightExtensions,
-} from "./task-description-markdown";
+  vimEditorCodeLanguages,
+  vimEditorHighlightExtensions,
+} from "./vim-editor-markdown";
 
 const mountedViews: EditorView[] = [];
 
@@ -17,7 +17,7 @@ function renderMarkdown(doc: string) {
   const view = new EditorView({
     state: EditorState.create({
       doc,
-      extensions: [markdown(), markdownConceal],
+      extensions: [markdown(), markdownConceal()],
     }),
     parent,
   });
@@ -35,10 +35,10 @@ function renderMarkdownWithCodeLanguages(doc: string) {
       doc,
       extensions: [
         markdown({
-          codeLanguages: taskDescriptionCodeLanguages,
+          codeLanguages: vimEditorCodeLanguages,
         }),
-        ...taskDescriptionHighlightExtensions,
-        markdownConceal,
+        ...vimEditorHighlightExtensions,
+        markdownConceal(),
       ],
     }),
     parent,

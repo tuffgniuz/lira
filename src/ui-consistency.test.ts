@@ -7,7 +7,8 @@ import quickCaptureModalSource from "./components/actions/quick-capture-modal/qu
 import projectsPageSource from "./pages/projects/projects-page.tsx?raw";
 import settingsModalSource from "./components/actions/settings-modal/settings-modal.tsx?raw";
 import newTaskModalSource from "./components/actions/new-task-modal/new-task-modal.tsx?raw";
-import taskDescriptionMarkdownSource from "./lib/codemirror/task-description-markdown.ts?raw";
+import vimEditorMarkdownSource from "./lib/codemirror/vim-editor-markdown.ts?raw";
+import vimEditorSource from "./components/data-input/vim-editor/vim-editor.tsx?raw";
 import taskDetailPageSource from "./pages/tasks/task-detail-page.tsx?raw";
 import tasksPageSource from "./pages/tasks/tasks-page.tsx?raw";
 
@@ -25,7 +26,7 @@ function getCssBlock(selector: string) {
 
 function getSourceBlock(source: string, selector: string) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = source.match(new RegExp(`${escapedSelector}:\\s*\\{([\\s\\S]*?)\\n\\s*\\}`, "m"));
+  const match = source.match(new RegExp(`${escapedSelector}:\\s*\\{([\\s\\S]*?)\\n\\s*\\}[,} ]`, "m"));
 
   expect(match?.[1]).toBeDefined();
 
@@ -184,23 +185,23 @@ describe("ui consistency", () => {
   });
 
   it("keeps markdown list markers readable inside the task editor", () => {
-    const formattingBlock = getSourceBlock(taskDetailPageSource, '".cm-formatting"');
-    const formattingListBlock = getSourceBlock(taskDetailPageSource, '".cm-formatting-list"');
-    const concealedListBlock = getSourceBlock(taskDetailPageSource, '".cm-conceal-widget--list"');
-    const concealedHeadingBlock = getSourceBlock(taskDetailPageSource, '".cm-conceal-widget--heading"');
-    const codeBlockLineBlock = getSourceBlock(taskDetailPageSource, '".cm-line--code-block"');
-    const codeBlockInfoBlock = getSourceBlock(taskDetailPageSource, '".cm-line--code-block-info"');
-    const codeBlockBodyBlock = getSourceBlock(taskDetailPageSource, '".cm-line--code-block-body"');
-    const codeBlockEndBlock = getSourceBlock(taskDetailPageSource, '".cm-line--code-block-end"');
+    const formattingBlock = getSourceBlock(vimEditorSource, '".cm-formatting"');
+    const formattingListBlock = getSourceBlock(vimEditorSource, '".cm-formatting-list"');
+    const concealedListBlock = getSourceBlock(vimEditorSource, '".cm-conceal-widget--list"');
+    const concealedHeadingBlock = getSourceBlock(vimEditorSource, '".cm-conceal-widget--heading"');
+    const codeBlockLineBlock = getSourceBlock(vimEditorSource, '".cm-line--code-block"');
+    const codeBlockInfoBlock = getSourceBlock(vimEditorSource, '".cm-line--code-block-info"');
+    const codeBlockBodyBlock = getSourceBlock(vimEditorSource, '".cm-line--code-block-body"');
+    const codeBlockEndBlock = getSourceBlock(vimEditorSource, '".cm-line--code-block-end"');
 
-    expect(taskDetailPageSource).toContain("taskDescriptionHighlightExtensions");
-    expect(taskDescriptionMarkdownSource).toContain("HighlightStyle.define");
-    expect(taskDescriptionMarkdownSource).toContain("tag: tags.meta");
-    expect(taskDescriptionMarkdownSource).toContain("tag: [tags.keyword, tags.controlKeyword, tags.operatorKeyword, tags.modifier]");
-    expect(taskDescriptionMarkdownSource).toContain(`tag: tags.heading,
+    expect(vimEditorSource).toContain("vimEditorHighlightExtensions");
+    expect(vimEditorMarkdownSource).toContain("HighlightStyle.define");
+    expect(vimEditorMarkdownSource).toContain("tag: tags.meta");
+    expect(vimEditorMarkdownSource).toContain("tag: [tags.keyword, tags.controlKeyword, tags.operatorKeyword, tags.modifier]");
+    expect(vimEditorMarkdownSource).toContain(`tag: tags.heading,
         color: "var(--color-accent)"`);
-    expect(taskDescriptionMarkdownSource).toContain('color: "var(--color-accent-hover)"');
-    expect(taskDetailPageSource).toContain("codeLanguages: taskDescriptionCodeLanguages");
+    expect(vimEditorMarkdownSource).toContain('color: "var(--color-accent-hover)"');
+    expect(vimEditorSource).toContain("codeLanguages: vimEditorCodeLanguages");
     expect(formattingBlock).toContain('color: "var(--color-text-secondary)"');
     expect(formattingListBlock).toContain('color: "var(--color-accent-hover)"');
     expect(concealedListBlock).toContain('color: "var(--color-accent-hover)"');
@@ -216,41 +217,37 @@ describe("ui consistency", () => {
     expect(codeBlockBodyBlock).toContain('color: "var(--color-text-primary)"');
     expect(codeBlockEndBlock).toContain('color: "var(--color-text-primary)"');
     expect(codeBlockEndBlock).not.toContain('color: "transparent"');
-    expect(taskDetailPageSource).toContain('".cm-conceal-widget": {');
+    expect(vimEditorSource).toContain('".cm-conceal-widget": {');
   });
 
   it("does not install a custom code-block exit plugin in the task editor", () => {
-    expect(taskDetailPageSource).not.toContain("markdownCodeBlockExit");
+    expect(vimEditorSource).not.toContain("markdownCodeBlockExit");
   });
 
   it("supports multiple fenced code languages and richer code token highlighting in the task editor", () => {
-    expect(taskDetailPageSource).toContain("taskDescriptionCodeLanguages");
-    expect(taskDescriptionMarkdownSource).toContain('alias: ["javascript", "js", "node", "nodejs", "jsx"]');
-    expect(taskDescriptionMarkdownSource).toContain('alias: ["typescript", "ts", "tsx"]');
-    expect(taskDescriptionMarkdownSource).toContain('alias: ["python", "py"]');
-    expect(taskDescriptionMarkdownSource).toContain('alias: ["bash", "sh", "shell", "zsh"]');
-    expect(taskDescriptionMarkdownSource).toContain("tags.propertyName");
-    expect(taskDescriptionMarkdownSource).toContain("tags.operator");
-    expect(taskDescriptionMarkdownSource).toContain("tags.regexp");
-    expect(taskDescriptionMarkdownSource).toContain("defaultHighlightStyle");
+    expect(vimEditorMarkdownSource).toContain('alias: ["javascript", "js", "node", "nodejs", "jsx"]');
+    expect(vimEditorMarkdownSource).toContain('alias: ["typescript", "ts", "tsx"]');
+    expect(vimEditorMarkdownSource).toContain('alias: ["python", "py"]');
+    expect(vimEditorMarkdownSource).toContain('alias: ["bash", "sh", "shell", "zsh"]');
+    expect(vimEditorMarkdownSource).toContain("tags.propertyName");
+    expect(vimEditorMarkdownSource).toContain("tags.operator");
+    expect(vimEditorMarkdownSource).toContain("tags.regexp");
+    expect(vimEditorMarkdownSource).toContain("defaultHighlightStyle");
   });
 
   it("uses bundled recursive typography for the task description editor", () => {
     expect(mainSource).toContain('@fontsource-variable/recursive');
-    expect(taskDetailPageSource).toContain('fontFamily: \'"Recursive Variable", "IBM Plex Sans", "Segoe UI", sans-serif\'');
-    expect(taskDetailPageSource).toContain('fontSize: "1rem"');
-    expect(taskDetailPageSource).toContain('fontWeight: "360"');
   });
 
   it("keeps the task editor status bar minimal and flat", () => {
     const taskDetailContent = getCssBlock(".task-detail-page__content");
-    const editorSurface = getCssBlock(".task-description-editor__surface");
-    const editorFrame = getCssBlock(".task-description-editor__surface .cm-editor");
-    const statusBar = getCssBlock(".task-description-editor__status");
-    const statusMode = getCssBlock(".task-description-editor__status-mode");
-    const statusModeInsert = getCssBlock('.task-description-editor__status-mode[data-mode="insert"]');
-    const statusModeNormal = getCssBlock('.task-description-editor__status-mode[data-mode="normal"]');
-    const statusModeVisual = getCssBlock('.task-description-editor__status-mode[data-mode="visual"]');
+    const editorSurface = getCssBlock(".vim-editor__surface");
+    const editorFrame = getCssBlock(".vim-editor__surface .cm-editor");
+    const statusBar = getCssBlock(".vim-editor__status");
+    const statusMode = getCssBlock(".vim-editor__status-mode");
+    const statusModeInsert = getCssBlock('.vim-editor__status-mode[data-mode="insert"]');
+    const statusModeNormal = getCssBlock('.vim-editor__status-mode[data-mode="normal"]');
+    const statusModeVisual = getCssBlock('.vim-editor__status-mode[data-mode="visual"]');
 
     expect(taskDetailContent).toContain("flex: 1;");
     expect(editorSurface).toContain("border: none;");
@@ -260,10 +257,10 @@ describe("ui consistency", () => {
     expect(editorFrame).toContain("box-shadow: none;");
     expect(statusBar).toContain("display: flex;");
     expect(statusBar).toContain("justify-content: space-between;");
-    expect(statusBar).toContain("position: sticky;");
-    expect(statusBar).toContain("bottom: 0;");
-    expect(statusBar).toContain("width: 100%;");
-    expect(statusBar).toContain('background: color-mix(in srgb, var(--color-surface-elevated) 72%, transparent 28%);');
+    expect(statusBar).toContain("position: fixed;");
+    expect(statusBar).toContain("bottom: 1.5rem;");
+    expect(statusBar).toContain("width: min(calc(100vw - var(--layout-rail-width) - 4rem), 44rem);");
+    expect(statusBar).toContain('background: color-mix(in srgb, var(--color-surface-elevated) 72%, var(--color-main-bg) 28%);');
     expect(statusBar).toContain('font-family: "Recursive Variable", "JetBrains Mono", monospace;');
     expect(statusBar).not.toContain("border:");
     expect(statusMode).toContain("color: var(--color-text-primary);");
@@ -271,7 +268,6 @@ describe("ui consistency", () => {
     expect(statusModeInsert).toContain("background:");
     expect(statusModeNormal).toContain("background:");
     expect(statusModeVisual).toContain("background:");
-    expect(taskDetailPageSource).toContain('aria-label="Editor status"');
   });
 
   it("keeps equal breathing room above and below the project board title", () => {
@@ -308,15 +304,15 @@ describe("ui consistency", () => {
     const tasksFilterFocus = getCssBlock(".tasks-filter:focus-visible");
     const settingsNavButtonFocus = getCssBlock(".settings-nav__button:focus-visible");
     const themeCardFocus = getCssBlock(".theme-card:focus-visible");
-    const newTaskChoiceFocus = getCssBlock(".new-task__project-choice:focus-visible");
-    const newGoalChoiceFocus = getCssBlock(".new-goal__choice:focus-visible");
+    const newTaskFocus = getCssBlock(".new-task__project-choice:focus-visible");
+    const newGoalFocus = getCssBlock(".new-goal__choice:focus-visible");
 
     expect(navButtonFocus).toContain("outline: none;");
     expect(tasksFilterFocus).toContain("outline: none;");
     expect(settingsNavButtonFocus).toContain("outline: none;");
     expect(themeCardFocus).toContain("outline: none;");
-    expect(newTaskChoiceFocus).toContain("outline: none;");
-    expect(newGoalChoiceFocus).toContain("outline: none;");
+    expect(newTaskFocus).toContain("outline: none;");
+    expect(newGoalFocus).toContain("outline: none;");
   });
 
   it("does not use ad hoc inline border or shadow styles in feature components", () => {

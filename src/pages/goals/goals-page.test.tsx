@@ -77,7 +77,6 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
-        onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
       />,
     );
@@ -124,7 +123,6 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
-        onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
       />,
     );
@@ -142,7 +140,6 @@ describe("GoalsPage", () => {
   it("lets linked goal tasks be completed, edited, or deleted from the goal card", () => {
     const onUpdateGoal = vi.fn();
     const onUpdateTask = vi.fn();
-    const onDeleteTask = vi.fn();
     const onSelectTask = vi.fn();
 
     render(
@@ -203,7 +200,6 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onSelectTask={onSelectTask}
         onUpdateTask={onUpdateTask}
-        onDeleteTask={onDeleteTask}
         onNotify={vi.fn()}
       />,
     );
@@ -253,7 +249,6 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
-        onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
       />,
     );
@@ -287,7 +282,6 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
-        onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
       />,
     );
@@ -334,7 +328,6 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
-        onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
       />,
     );
@@ -374,7 +367,6 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
-        onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
       />,
     );
@@ -398,7 +390,6 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
-        onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
       />,
     );
@@ -423,7 +414,6 @@ describe("GoalsPage", () => {
         onEditGoal={vi.fn()}
         onSelectTask={vi.fn()}
         onUpdateTask={vi.fn()}
-        onDeleteTask={vi.fn()}
         onNotify={vi.fn()}
       />,
     );

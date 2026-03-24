@@ -17,7 +17,7 @@ import { yaml } from "@codemirror/lang-yaml";
 import { tags } from "@lezer/highlight";
 import { shell } from "@codemirror/legacy-modes/mode/shell";
 
-export const taskDescriptionCodeLanguages = [
+export const vimEditorCodeLanguages = [
   LanguageDescription.of({
     name: "Rust",
     alias: ["rust", "rs"],
@@ -70,7 +70,7 @@ export const taskDescriptionCodeLanguages = [
   }),
 ];
 
-export const taskDescriptionHighlightExtensions = [
+export const vimEditorHighlightExtensions = [
   syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
   syntaxHighlighting(
     HighlightStyle.define([
