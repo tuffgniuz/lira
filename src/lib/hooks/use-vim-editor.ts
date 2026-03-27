@@ -103,20 +103,60 @@ export function useVimEditor(focusKey: string) {
     focusEditorInInsertMode(view, setVimMode);
 
     view.dom.addEventListener("keydown", (event: KeyboardEvent) => {
-      if (event.key === "Enter" && event.shiftKey) {
-        const scroller = view.scrollDOM;
-        if (scroller) {
-          scroller.scrollBy({
-            top: window.innerHeight * 0.35,
-            behavior: "smooth",
-          });
-        }
+      if (event.key === "z" && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+        // Handle native Vim z z, z t, z b by checking the next key shortly after
+        // This is a bit of a hack since we don't have direct access to the Vim command stream here,
+        // but it ensures the parent scroller follows the Vim intent.
+        setTimeout(() => handleEditorUpdate(view), 10);
+      }
+
+      if (event.key === "Enter" && event.altKey) {
+        // Legacy support/alternative
+        centerCursor(view);
+      }
+
+      if (event.key === "z" && event.altKey) {
+        event.preventDefault();
+        centerCursor(view);
       }
     });
   }
 
+  function centerCursor(view: EditorView) {
+    if (view.state.selection.main.head === undefined) return;
+    const cursor = view.coordsAtPos(view.state.selection.main.head);
+    const scroller = view.scrollDOM.closest(".main-panel");
+    if (cursor && scroller) {
+      const rect = scroller.getBoundingClientRect();
+      const viewportCenter = rect.top + (rect.height / 2);
+      scroller.scrollBy({
+        top: cursor.top - viewportCenter,
+        behavior: "smooth",
+      });
+    }
+  }
+
   function handleEditorUpdate(view: EditorView) {
     syncVimModeAttribute(view, setVimMode);
+
+    if (view.state.selection.main.head !== undefined) {
+      const cursor = view.coordsAtPos(view.state.selection.main.head);
+      if (cursor) {
+        const scroller = view.scrollDOM.closest(".main-panel");
+        if (scroller) {
+          const rect = scroller.getBoundingClientRect();
+          // Keep the cursor centered within a 30% vertical window
+          const topThreshold = rect.top + (rect.height * 0.25);
+          const bottomThreshold = rect.top + (rect.height * 0.55);
+
+          if (cursor.bottom > bottomThreshold) {
+            scroller.scrollTop += (cursor.bottom - bottomThreshold);
+          } else if (cursor.top < topThreshold) {
+            scroller.scrollTop -= (topThreshold - cursor.top);
+          }
+        }
+      }
+    }
   }
 
   return {

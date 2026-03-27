@@ -98,4 +98,32 @@ describe("RightRailColumn", () => {
     expect(screen.getByLabelText("Wednesday status: pending")).toBeInTheDocument();
     expect(screen.getByLabelText("Saturday status: off day")).toBeInTheDocument();
   });
+
+  it("shows streak and consistency sections for daily goals", () => {
+    render(
+      <RightRailColumn
+        items={[
+          createItem({
+            id: "goal-1",
+            kind: "goal",
+            title: "Daily writing",
+            goalPeriod: "daily",
+            goalMetric: undefined,
+            goalTarget: 1,
+            goalProgressByDate: {
+              "2026-03-24": 1,
+              "2026-03-23": 1,
+              "2026-03-22": 0,
+            },
+          }),
+        ]}
+        todayDate="2026-03-24"
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Streaks" })).toBeInTheDocument();
+    expect(screen.getByText("2d")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Consistency" })).toBeInTheDocument();
+    expect(screen.getByText(/This week/)).toBeInTheDocument();
+  });
 });

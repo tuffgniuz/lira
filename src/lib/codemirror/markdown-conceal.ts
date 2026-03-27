@@ -44,16 +44,27 @@ function concealDecorations(view: EditorView) {
   const { state } = view;
   const tree = syntaxTree(state);
 
+  const selectionLines = new Set<number>();
+  for (const range of state.selection.ranges) {
+    const fromLine = state.doc.lineAt(range.from).number;
+    const toLine = state.doc.lineAt(range.to).number;
+    for (let i = fromLine; i <= toLine; i++) {
+      selectionLines.add(i);
+    }
+  }
+
   tree.iterate({
     enter: (node) => {
       const { from, to, name } = node;
+      const line = state.doc.lineAt(from);
+      const isLineFocused = selectionLines.has(line.number);
 
       if (name === "FencedCode") {
         const startLine = state.doc.lineAt(from);
         const endLine = state.doc.lineAt(to);
 
         for (let lineNumber = startLine.number; lineNumber <= endLine.number; lineNumber += 1) {
-          const line = state.doc.line(lineNumber);
+          const l = state.doc.line(lineNumber);
           const lineClasses = ["cm-line--code-block"];
 
           if (lineNumber === startLine.number) {
@@ -67,12 +78,13 @@ function concealDecorations(view: EditorView) {
           widgets.push(
             Decoration.line({
               class: lineClasses.join(" "),
-            }).range(line.from),
+            }).range(l.from),
           );
         }
       }
 
       if (name === "HeaderMark") {
+        if (isLineFocused) return;
         if (state.sliceDoc(to, to + 1) !== " ") {
           return;
         }
@@ -96,30 +108,31 @@ function concealDecorations(view: EditorView) {
         const isOrderedList = Boolean(orderedMatch);
         const marker = orderedMatch ? `${orderedMatch[1]}.` : "•";
 
-        const line = state.doc.lineAt(from);
         widgets.push(
           Decoration.line({
             class: "cm-line--list",
           }).range(line.from),
         );
 
-        widgets.push(
-          Decoration.replace({
-            widget: new MarkdownMarkerWidget(
-              marker,
-              `cm-conceal-widget--list ${
-                isOrderedList
-                  ? "cm-conceal-widget--ordered"
-                  : "cm-conceal-widget--unordered"
-              }`,
-            ),
-          }).range(from, markerRangeEnd(view, to)),
-        );
+        if (!isLineFocused) {
+          widgets.push(
+            Decoration.replace({
+              widget: new MarkdownMarkerWidget(
+                marker,
+                `cm-conceal-widget--list ${
+                  isOrderedList
+                    ? "cm-conceal-widget--ordered"
+                    : "cm-conceal-widget--unordered"
+                }`,
+              ),
+            }).range(from, markerRangeEnd(view, to)),
+          );
+        }
         return;
       }
 
       if (name === "CodeMark") {
-        const line = state.doc.lineAt(from);
+        if (isLineFocused) return;
         const marker = fenceMarkerText(line.text);
 
         if (!marker) {
@@ -136,6 +149,39 @@ function concealDecorations(view: EditorView) {
         );
       }
 
+      if (name === "EmphasisMark") {
+        if (isLineFocused) return;
+        widgets.push(
+          Decoration.replace({}).range(from, to),
+        );
+      }
+
+      if (name === "QuoteMark") {
+        widgets.push(
+          Decoration.line({
+            class: "cm-line--quote",
+          }).range(line.from),
+        );
+
+        if (isLineFocused) return;
+        widgets.push(
+          Decoration.replace({}).range(from, markerRangeEnd(view, to)),
+        );
+      }
+
+      if (name === "HorizontalRule") {
+        widgets.push(
+          Decoration.line({
+            class: "cm-line--hr",
+          }).range(line.from),
+        );
+
+        if (!isLineFocused) {
+          widgets.push(
+            Decoration.replace({}).range(from, to),
+          );
+        }
+      }
     },
   });
 

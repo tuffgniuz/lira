@@ -10,6 +10,7 @@ export type ProjectTaskTemplateField = {
 };
 
 export type ProjectTaskTemplate = {
+  descriptionTemplate: string;
   fields: ProjectTaskTemplateField[];
   updatedAt: string;
 };

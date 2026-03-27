@@ -97,4 +97,63 @@ describe("buildRightRailContext", () => {
       },
     ]);
   });
+
+  it("builds streak and consistency snapshots for active daily goals", () => {
+    const items = [
+      createItem({
+        id: "goal-1",
+        kind: "goal",
+        title: "Daily writing",
+        goalPeriod: "daily",
+        goalMetric: undefined,
+        goalTarget: 1,
+        goalProgressByDate: {
+          "2026-03-24": 1,
+          "2026-03-23": 1,
+          "2026-03-22": 0,
+          "2026-03-21": 1,
+          "2026-03-20": 1,
+        },
+      }),
+      createItem({
+        id: "goal-2",
+        kind: "goal",
+        title: "Daily coding",
+        goalPeriod: "daily",
+        goalMetric: undefined,
+        goalTarget: 1,
+        goalProgressByDate: {
+          "2026-03-24": 1,
+          "2026-03-23": 0,
+          "2026-03-22": 1,
+          "2026-03-21": 1,
+          "2026-03-20": 1,
+        },
+      }),
+    ];
+
+    const context = buildRightRailContext(items, "2026-03-24");
+
+    expect(context.streaks).toEqual([
+      {
+        goalId: "goal-1",
+        goalTitle: "Daily writing",
+        currentStreakDays: 2,
+        bestStreakDays: 2,
+      },
+      {
+        goalId: "goal-2",
+        goalTitle: "Daily coding",
+        currentStreakDays: 1,
+        bestStreakDays: 3,
+      },
+    ]);
+    expect(context.consistency).toEqual({
+      score: 75,
+      metDays: 3,
+      missedDays: 1,
+      offDays: 0,
+      deltaFromPreviousWeek: 75,
+    });
+  });
 });

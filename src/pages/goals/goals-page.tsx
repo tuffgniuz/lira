@@ -19,11 +19,13 @@ import {
 import { getProjectName } from "@/lib/domain/project-relations";
 import type { GoalPeriod, Item } from "@/models/workspace-item";
 import type { Project } from "@/models/project";
+import type { RightRailMode } from "@/app/shell/page-content";
 
 type GoalsPageProps = {
   items: Item[];
   projects: Project[];
   todayDate: string;
+  rightRailMode: RightRailMode;
   selectedGoalId: string;
   onSelectGoal: (goalId: string) => void;
   onUpdateGoal: (goalId: string, updates: Partial<Item>) => void;
@@ -45,6 +47,7 @@ export function GoalsPage({
   items,
   projects,
   todayDate,
+  rightRailMode,
   selectedGoalId,
   onSelectGoal,
   onUpdateGoal,
@@ -70,7 +73,12 @@ export function GoalsPage({
   const layoutMode = resolveGoalsLayoutMode(windowWidth);
   const showInlinePeriods = layoutMode !== "wide";
   const showStackedInsights = layoutMode === "narrow";
-  const showRightRail = layoutMode !== "narrow";
+  const showRightRail =
+    rightRailMode === "hidden"
+      ? false
+      : rightRailMode === "pinned"
+        ? true
+        : layoutMode !== "narrow";
 
   const { activeColumn, focusedGoalId } = useGoalsNavigation({
     goals: filteredGoals,

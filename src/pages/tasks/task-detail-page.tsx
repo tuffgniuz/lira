@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { ActionBar } from "@/components/actions/action-bar";
 import { Modal } from "@/components/actions/modal";
-import { FormField } from "@/components/data-input/form-field";
 import { VimEditor } from "@/components/data-input/vim-editor";
 import { PageShell } from "@/components/layout/page-shell";
-import { TrashIcon } from "@/components/icons";
+import { LayersIcon, TrashIcon } from "@/components/icons";
 import { useDebouncedTaskDraft } from "@/lib/hooks/use-debounced-task-draft";
 import { useTaskDetailNavigation } from "@/lib/hooks/use-task-detail-navigation";
 import { getProjectName } from "@/lib/domain/project-relations";
 import type { Project } from "@/models/project";
 import type { Item } from "@/models/workspace-item";
-import { formatRelativeTimestamp } from "@/lib/utils/format-relative-timestamp";
 
 type TaskDetailPageProps = {
   task: Item;
@@ -111,31 +109,31 @@ export function TaskDetailPage({
     <PageShell
       ariaLabel="Task detail"
       className="page--task-detail"
-      headerActions={
-        <ActionBar className="task-detail-page__header-actions">
-          <button
-            type="button"
-            className="task-detail-page__button task-detail-page__button--danger"
-            aria-label="Delete task"
-            onClick={() => setPendingDeleteTask({ id: task.id, title: task.title })}
-          >
-            <TrashIcon className="task-detail-page__icon" />
-          </button>
-        </ActionBar>
-      }
     >
       <div ref={containerRef} className="task-detail-page__content">
         <header className="task-detail-page__header">
-          <p className="task-detail-page__meta">
-            {labelForCompletion(task.isCompleted)} • {projectName}
-          </p>
-          <h1 className="task-detail-page__title">
-            <TaskTitleEditor
-              taskId={task.id}
-              initialTitle={task.title}
-              onUpdateTitle={(title) => onUpdateTask(task.id, { title })}
-            />
-          </h1>
+          <div className="task-detail-page__header-main">
+            <p className="task-detail-page__meta">
+              {labelForCompletion(task.isCompleted)} • {projectName}
+            </p>
+            <h1 className="task-detail-page__title">
+              <TaskTitleEditor
+                taskId={task.id}
+                initialTitle={task.title}
+                onUpdateTitle={(title) => onUpdateTask(task.id, { title })}
+              />
+            </h1>
+          </div>
+          <ActionBar className="task-detail-page__header-actions task-detail-page__window-action">
+            <button
+              type="button"
+              className="task-detail-page__button task-detail-page__button--danger"
+              aria-label="Delete task"
+              onClick={() => setPendingDeleteTask({ id: task.id, title: task.title })}
+            >
+              <TrashIcon className="task-detail-page__icon" />
+            </button>
+          </ActionBar>
         </header>
 
         {projectTemplateFields.length ? (
@@ -143,8 +141,13 @@ export function TaskDetailPage({
             <div className="task-detail-page__project-field-stack">
               {projectTemplateFields.map((field) => (
                 field.type === "boolean" ? (
-                  <FormField key={field.id} label={field.label} className="task-detail-page__project-form-field">
-                    <label className="task-detail-page__checkbox-field">
+                  <label key={field.id} className="task-detail-page__project-form-field">
+                    <span className="task-detail-page__project-field-meta">
+                      <LayersIcon className="task-detail-page__project-field-icon" />
+                      <span className="task-detail-page__project-field-label">{field.label}</span>
+                    </span>
+                    <span className="task-detail-page__project-field-value">
+                      <span className="task-detail-page__checkbox-field">
                       <input
                         type="checkbox"
                         className="task-detail-page__checkbox-input"
@@ -160,13 +163,18 @@ export function TaskDetailPage({
                         }
                       />
                       <span className="task-detail-page__checkbox-ui" aria-hidden="true" />
-                    </label>
-                  </FormField>
+                      </span>
+                    </span>
+                  </label>
                 ) : (
-                  <FormField key={field.id} label={field.label} className="task-detail-page__project-form-field">
+                  <label key={field.id} className="task-detail-page__project-form-field">
+                    <span className="task-detail-page__project-field-meta">
+                      <LayersIcon className="task-detail-page__project-field-icon" />
+                      <span className="task-detail-page__project-field-label">{field.label}</span>
+                    </span>
                     <input
                       type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
-                      className="ui-input"
+                      className="ui-input task-detail-page__project-field-value"
                       aria-label={field.label}
                       placeholder={`Add ${field.label}`}
                       value={task.customFieldValues?.[field.key] ?? ""}
@@ -179,7 +187,7 @@ export function TaskDetailPage({
                         })
                       }
                     />
-                  </FormField>
+                  </label>
                 )
               ))}
             </div>

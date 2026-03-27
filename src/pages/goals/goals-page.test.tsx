@@ -70,6 +70,7 @@ describe("GoalsPage", () => {
         ] as Item[]}
         projects={[] as Project[]}
         todayDate="2026-03-17"
+        rightRailMode="auto"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
         onUpdateGoal={vi.fn()}
@@ -116,6 +117,7 @@ describe("GoalsPage", () => {
         ] as Item[]}
         projects={[] as Project[]}
         todayDate="2026-03-17"
+        rightRailMode="auto"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
         onUpdateGoal={onUpdateGoal}
@@ -192,7 +194,8 @@ describe("GoalsPage", () => {
           },
         ] as Item[]}
         projects={[] as Project[]}
-        todayDate="2026-03-17"
+        todayDate="2026-03-18"
+        rightRailMode="auto"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
         onUpdateGoal={onUpdateGoal}
@@ -241,7 +244,8 @@ describe("GoalsPage", () => {
           },
         ] as Item[]}
         projects={[] as Project[]}
-        todayDate="2026-03-17"
+        todayDate="2026-03-22"
+        rightRailMode="auto"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
         onUpdateGoal={vi.fn()}
@@ -274,7 +278,8 @@ describe("GoalsPage", () => {
           }),
         ] as Item[]}
         projects={[] as Project[]}
-        todayDate="2026-03-18"
+        todayDate="2026-03-17"
+        rightRailMode="auto"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
         onUpdateGoal={vi.fn()}
@@ -320,7 +325,8 @@ describe("GoalsPage", () => {
           }),
         ] as Item[]}
         projects={[] as Project[]}
-        todayDate="2026-03-22"
+        todayDate="2026-03-17"
+        rightRailMode="auto"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
         onUpdateGoal={onUpdateGoal}
@@ -360,6 +366,7 @@ describe("GoalsPage", () => {
         items={[] as Item[]}
         projects={[] as Project[]}
         todayDate="2026-03-17"
+        rightRailMode="auto"
         selectedGoalId=""
         onSelectGoal={vi.fn()}
         onUpdateGoal={vi.fn()}
@@ -383,6 +390,7 @@ describe("GoalsPage", () => {
         items={[createGoal()]}
         projects={[] as Project[]}
         todayDate="2026-03-17"
+        rightRailMode="auto"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
         onUpdateGoal={vi.fn()}
@@ -407,6 +415,7 @@ describe("GoalsPage", () => {
         items={[createGoal()]}
         projects={[] as Project[]}
         todayDate="2026-03-17"
+        rightRailMode="auto"
         selectedGoalId="goal-1"
         onSelectGoal={vi.fn()}
         onUpdateGoal={vi.fn()}

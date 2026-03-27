@@ -50,6 +50,8 @@ pub struct ProjectTaskTemplateField {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectTaskTemplate {
     #[serde(default)]
+    pub description_template: String,
+    #[serde(default)]
     pub fields: Vec<ProjectTaskTemplateField>,
     #[serde(default)]
     pub updated_at: String,

@@ -3,6 +3,8 @@ import type { ViewId } from "@/app/navigation/types";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Kbd } from "@/components/data-display/kbd";
 import { PageShell } from "@/components/layout/page-shell";
+import { RightRailColumn } from "@/components/layout/right-rail-column";
+import { ThreeColumnLayout } from "@/components/layout/three-column-layout";
 import type { Doc } from "@/models/doc";
 import type { Item } from "@/models/workspace-item";
 import type { Project } from "@/models/project";
@@ -13,6 +15,11 @@ import { GoalsPage } from "@/pages/goals/goals-page";
 import { ProjectsPage } from "@/pages/projects/projects-page";
 import { TaskDetailPage } from "@/pages/tasks/task-detail-page";
 import { TasksPage } from "@/pages/tasks/tasks-page";
+import { GoalsDashboard } from "@/pages/dashboard/goals-dashboard";
+import { useWindowWidth } from "@/lib/hooks/use-window-width";
+import type { ReactNode } from "react";
+
+export type RightRailMode = "auto" | "pinned" | "hidden";
 
 type PageContentProps = {
   activeView: ViewId;
@@ -58,6 +65,8 @@ type PageContentProps = {
   ) => void;
   onDeleteCapture: (captureId: string) => void;
   onNotify: (message: string, type?: "inform" | "success" | "warning") => void;
+  onOpenGoalFromDashboard: (goalId: string) => void;
+  rightRailMode: RightRailMode;
   taskDraftResetKeys: Record<string, number>;
   docDraftResetKeys: Record<string, number>;
 };
@@ -92,19 +101,75 @@ export function PageContent({
   onUpdateCaptureState,
   onDeleteCapture,
   onNotify,
+  onOpenGoalFromDashboard,
+  rightRailMode,
   taskDraftResetKeys,
   docDraftResetKeys,
 }: PageContentProps) {
+  const windowWidth = useWindowWidth();
+  const showRightRailByMode =
+    rightRailMode === "pinned"
+      ? true
+      : rightRailMode === "hidden"
+        ? false
+        : windowWidth >= 900;
+  const showDashboardRightRail = true;
+  const showRightRail = activeView === "dashboard" ? showDashboardRightRail : showRightRailByMode;
+  const usesInternalRightRail =
+    activeView === "goals" || (activeView === "projects" && !selectedTaskId);
+
+  function withGlobalRightRail(content: ReactNode) {
+    if (!showRightRail || usesInternalRightRail || activeView === "dashboard") {
+      return content;
+    }
+
+    return (
+      <div className="page-global-rail">
+        <div className="page-global-rail__main">{content}</div>
+        <aside className="page-global-rail__rail" aria-label="Page insights">
+          <RightRailColumn
+            items={items}
+            todayDate={todayDate}
+          />
+        </aside>
+      </div>
+    );
+  }
+
   if (activeView === "dashboard") {
     return (
       <PageShell ariaLabel="Dashboard" className="page--dashboard">
-        <h1 className="home-greeting">{getGreetingForTime(new Date())}</h1>
+        <ThreeColumnLayout
+          className="dashboard-layout"
+          leftCollapsed
+          rightCollapsed={!showRightRail}
+          leftLabel="Dashboard navigation"
+          centerLabel="Dashboard"
+          rightLabel="Dashboard insights"
+          left={null}
+          center={
+            <section className="dashboard-main">
+              <h1 className="home-greeting">{getGreetingForTime(new Date())}</h1>
+              <GoalsDashboard
+                items={items}
+                todayDate={todayDate}
+                onOpenGoal={onOpenGoalFromDashboard}
+              />
+            </section>
+          }
+          right={
+            <RightRailColumn
+              items={items}
+              todayDate={todayDate}
+            />
+          }
+        />
       </PageShell>
     );
   }
 
   if (activeView === "inbox") {
-    return (
+    return withGlobalRightRail(
       <CaptureInboxPage
         captures={buildInboxCaptureViews(items, projects)}
         projects={projects.map((project) => ({ id: project.id, name: project.name }))}
@@ -114,7 +179,7 @@ export function PageContent({
         onUpdateCaptureState={onUpdateCaptureState}
         onDeleteCapture={onDeleteCapture}
         onNotify={onNotify}
-      />
+      />,
     );
   }
 
@@ -124,6 +189,7 @@ export function PageContent({
         items={items}
         projects={projects}
         todayDate={todayDate}
+        rightRailMode={rightRailMode}
         selectedGoalId={selectedGoalId}
         onSelectGoal={onSelectGoal}
         onUpdateGoal={onUpdateGoal}
@@ -140,7 +206,7 @@ export function PageContent({
     const selectedTask =
       items.find((item) => item.id === selectedTaskId && item.kind === "task") ?? null;
 
-    return (
+    return withGlobalRightRail(
       selectedTaskId ? (
         selectedTask ? (
           <TaskDetailPage
@@ -169,7 +235,7 @@ export function PageContent({
           onDeleteTask={onDeleteTask}
           onNotify={onNotify}
         />
-      )
+      ),
     );
   }
 
@@ -180,22 +246,25 @@ export function PageContent({
     return (
       selectedTaskId ? (
         selectedTask ? (
-          <TaskDetailPage
-            task={selectedTask}
-            projects={projects}
-            eyebrow="Projects"
-            backLabel="Back to project board"
-            onBack={() => onCloseTaskDetail("projects")}
-            onUpdateTask={onUpdateTask}
-            onDeleteTask={onDeleteTask}
-            onNotify={onNotify}
-            draftResetKey={taskDraftResetKeys[selectedTask.id] ?? 0}
-          />
+          withGlobalRightRail(
+            <TaskDetailPage
+              task={selectedTask}
+              projects={projects}
+              eyebrow="Projects"
+              backLabel="Back to project board"
+              onBack={() => onCloseTaskDetail("projects")}
+              onUpdateTask={onUpdateTask}
+              onDeleteTask={onDeleteTask}
+              onNotify={onNotify}
+              draftResetKey={taskDraftResetKeys[selectedTask.id] ?? 0}
+            />,
+          )
         ) : (
           <ProjectsPage
             projects={projects}
             items={items}
             todayDate={todayDate}
+            rightRailMode={rightRailMode}
             selectedProjectId={selectedProjectId}
             onUpdateProject={onUpdateProject}
             onUpdateTask={onUpdateTask}
@@ -210,6 +279,7 @@ export function PageContent({
           projects={projects}
           items={items}
           todayDate={todayDate}
+          rightRailMode={rightRailMode}
           selectedProjectId={selectedProjectId}
           onUpdateProject={onUpdateProject}
           onUpdateTask={onUpdateTask}
@@ -225,36 +295,38 @@ export function PageContent({
   if (activeView === "docs") {
     const selectedDoc = docs.find((doc) => doc.id === selectedDocId) ?? null;
 
-    return selectedDoc ? (
-      <DocDetailPage
-        doc={selectedDoc}
-        projects={projects}
-        onBack={onCloseDocDetail}
-        onUpdateDoc={onUpdateDoc}
-        onDeleteDoc={onDeleteDoc}
-        onNotify={onNotify}
-        draftResetKey={docDraftResetKeys[selectedDoc.id] ?? 0}
-      />
-    ) : (
-      <PageShell
-        ariaLabel="Docs"
-        eyebrow="Workspace"
-        title="Docs"
-        className="page--placeholder"
-      >
-        <EmptyState
-          title="No doc is open"
-          copy={
-            <>
-              Open a doc from the docs palette or create one with the <Kbd>Space</Kbd> <Kbd>n</Kbd> <Kbd>d</Kbd> shortcut.
-            </>
-          }
+    return withGlobalRightRail(
+      selectedDoc ? (
+        <DocDetailPage
+          doc={selectedDoc}
+          projects={projects}
+          onBack={onCloseDocDetail}
+          onUpdateDoc={onUpdateDoc}
+          onDeleteDoc={onDeleteDoc}
+          onNotify={onNotify}
+          draftResetKey={docDraftResetKeys[selectedDoc.id] ?? 0}
         />
-      </PageShell>
+      ) : (
+        <PageShell
+          ariaLabel="Docs"
+          eyebrow="Workspace"
+          title="Docs"
+          className="page--placeholder"
+        >
+          <EmptyState
+            title="No doc is open"
+            copy={
+              <>
+                Open a doc from the docs palette or create one with the <Kbd>Space</Kbd> <Kbd>n</Kbd> <Kbd>d</Kbd> shortcut.
+              </>
+            }
+          />
+        </PageShell>
+      ),
     );
   }
 
-  return (
+  return withGlobalRightRail(
     <PageShell
       ariaLabel={viewTitles[activeView]}
       eyebrow="Workspace"
@@ -265,7 +337,7 @@ export function PageContent({
         title={`${viewTitles[activeView]} will live here next`}
         copy="This screen is still a placeholder."
       />
-    </PageShell>
+    </PageShell>,
   );
 }
 

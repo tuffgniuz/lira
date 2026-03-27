@@ -17,6 +17,7 @@ type VimEditorProps = {
   placeholder?: string;
   ariaLabel?: string;
   className?: string;
+  showStatus?: boolean;
 };
 
 const vimEditorTheme = EditorView.theme({
@@ -164,6 +165,25 @@ const vimEditorTheme = EditorView.theme({
     background: "color-mix(in srgb, var(--color-surface-elevated) 55%, transparent 45%)",
     border: "1px solid color-mix(in srgb, var(--color-panel-muted) 40%, transparent 60%)",
   },
+  ".cm-line--quote": {
+    padding: "0.55rem 0.9rem 0.55rem 1rem",
+    margin: "0.45rem 0",
+    background: "color-mix(in srgb, var(--color-surface-elevated) 82%, transparent 18%)",
+    borderLeft: "2px solid var(--color-accent)",
+    borderRadius: "0.35rem",
+  },
+  ".cm-line--hr": {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "1.5rem 0",
+    "&::after": {
+      content: '""',
+      width: "100%",
+      height: "1px",
+      background: "var(--color-border-subtle)",
+    },
+  },
 });
 
 export function VimEditor({
@@ -173,6 +193,7 @@ export function VimEditor({
   placeholder = "Start typing...",
   ariaLabel = "Text editor",
   className = "",
+  showStatus = true,
 }: VimEditorProps) {
   const { handleEditorCreate, handleEditorUpdate, vimMode } = useVimEditor(focusKey);
 
@@ -212,34 +233,22 @@ export function VimEditor({
           highlightActiveLine: false,
           highlightActiveLineGutter: false,
         }}
-        onCreateEditor={(view) => {
-          handleEditorCreate(view);
-
-          view.dom.addEventListener("keydown", (event: KeyboardEvent) => {
-            if (event.key === "Enter" && event.shiftKey) {
-              const scroller = view.scrollDOM;
-              if (scroller) {
-                scroller.scrollBy({
-                  top: window.innerHeight * 0.35,
-                  behavior: "smooth",
-                });
-              }
-            }
-          });
-        }}
+        onCreateEditor={handleEditorCreate}
         onUpdate={(update) => {
           handleEditorUpdate(update.view);
         }}
         onChange={onChange}
       />
-      <div className="vim-editor__status" aria-label="Editor status">
-        <span className="vim-editor__status-mode" data-mode={vimMode}>
-          {vimMode.toUpperCase()}
-        </span>
-        <span className="vim-editor__status-counts">
-          {wordCount}W {value.length}C
-        </span>
-      </div>
+      {showStatus ? (
+        <div className="vim-editor__status" aria-label="Editor status">
+          <span className="vim-editor__status-mode" data-mode={vimMode}>
+            {vimMode.toUpperCase()}
+          </span>
+          <span className="vim-editor__status-counts">
+            {wordCount}W {value.length}C
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -21,11 +21,13 @@ import type {
   ProjectTaskTemplateField,
   ProjectTaskTemplateFieldType,
 } from "@/models/project";
+import type { RightRailMode } from "@/app/shell/page-content";
 
 type ProjectsPageProps = {
   projects: Project[];
   items: Item[];
   todayDate: string;
+  rightRailMode: RightRailMode;
   selectedProjectId: string;
   onUpdateProject: (
     projectId: string,
@@ -133,6 +135,7 @@ export function ProjectsPage({
   projects,
   items,
   todayDate,
+  rightRailMode,
   selectedProjectId,
   onUpdateProject,
   onUpdateTask,
@@ -149,6 +152,7 @@ export function ProjectsPage({
   const [taskTemplateDraftFields, setTaskTemplateDraftFields] = useState<ProjectTaskTemplateField[]>(
     [],
   );
+  const [taskTemplateDraftDescription, setTaskTemplateDraftDescription] = useState("");
   const [pendingTaskTemplateFocusIndex, setPendingTaskTemplateFocusIndex] = useState<number | null>(
     null,
   );
@@ -163,7 +167,12 @@ export function ProjectsPage({
   } | null>(null);
   const selectedProject =
     projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
-  const showRightRail = windowWidth >= 900;
+  const showRightRail =
+    rightRailMode === "hidden"
+      ? false
+      : rightRailMode === "pinned"
+        ? true
+        : windowWidth >= 900;
 
   const boardLanes = selectedProject?.hasKanbanBoard
     ? selectedProject.boardLanes.length
@@ -246,7 +255,6 @@ export function ProjectsPage({
     control: "label" | "type";
   } | null>(null);
   const addTemplateFieldButtonRef = useRef<HTMLButtonElement | null>(null);
-  const saveTemplateButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousTaskTemplateModalOpenRef = useRef(false);
   const boardInteractionStateRef = useRef({
     activeLaneId: "",
@@ -714,6 +722,7 @@ export function ProjectsPage({
 
   function openTaskTemplateModal() {
     const existingFields = selectedProject?.taskTemplate?.fields ?? [];
+    const existingDescription = selectedProject?.taskTemplate?.descriptionTemplate ?? "";
     const initialFields = existingFields.length ? existingFields : [createEmptyTaskTemplateField()];
     activeTaskTemplateControlRef.current = initialFields[0]
       ? {
@@ -722,6 +731,7 @@ export function ProjectsPage({
         }
       : null;
     setTaskTemplateDraftFields(initialFields);
+    setTaskTemplateDraftDescription(existingDescription);
     setPendingTaskTemplateFocusIndex(null);
     setTaskTemplateModalOpen(true);
   }
@@ -753,36 +763,6 @@ export function ProjectsPage({
     }
 
     element.focus();
-  }
-
-  function focusTaskTemplateControl(
-    rowIndex: number,
-    control: "label" | "type" | "next-row",
-  ) {
-    const currentField = taskTemplateDraftFields[rowIndex];
-
-    if (!currentField) {
-      return;
-    }
-
-    if (control === "label") {
-      focusTaskTemplateFieldById(currentField.id, "label");
-      return;
-    }
-
-    if (control === "type") {
-      focusTaskTemplateFieldById(currentField.id, "type");
-      return;
-    }
-
-    const nextField = taskTemplateDraftFields[rowIndex + 1];
-
-    if (nextField) {
-      focusTaskTemplateFieldById(nextField.id, "label");
-      return;
-    }
-
-    addTemplateFieldButtonRef.current?.focus();
   }
 
   function appendTaskTemplateField(options?: { focusNewField?: boolean }) {
@@ -833,15 +813,9 @@ export function ProjectsPage({
   function handleTaskTemplateModalKeyDown(
     event: ReactKeyboardEvent<HTMLInputElement | HTMLSelectElement>,
     rowIndex: number,
-    control: "label" | "type",
+    _control: "label" | "type",
     fieldId: string,
   ) {
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-      event.preventDefault();
-      void handleSaveTaskTemplate();
-      return;
-    }
-
     if (event.altKey && event.key.toLowerCase() === "n") {
       event.preventDefault();
       const nextIndex = taskTemplateDraftFields.length;
@@ -862,6 +836,7 @@ export function ProjectsPage({
       event.preventDefault();
       setTaskTemplateModalOpen(false);
       setTaskTemplateDraftFields([]);
+      setTaskTemplateDraftDescription("");
       return;
     }
 
@@ -870,13 +845,7 @@ export function ProjectsPage({
     }
 
     event.preventDefault();
-
-    if (control === "label") {
-      focusTaskTemplateControl(rowIndex, "type");
-      return;
-    }
-
-    focusTaskTemplateControl(rowIndex, "next-row");
+    void handleSaveTaskTemplate();
   }
 
   async function handleSaveTaskTemplate() {
@@ -901,10 +870,12 @@ export function ProjectsPage({
         };
       })
       .filter((field): field is ProjectTaskTemplateField => field !== null);
+    const normalizedDescription = taskTemplateDraftDescription.trim();
 
     const didPersist = await onUpdateProject(selectedProject.id, {
-      taskTemplate: normalizedFields.length
+      taskTemplate: normalizedFields.length || normalizedDescription
         ? {
+            descriptionTemplate: normalizedDescription,
             fields: normalizedFields,
             updatedAt: new Date().toISOString(),
           }
@@ -917,8 +888,11 @@ export function ProjectsPage({
 
     setTaskTemplateModalOpen(false);
     setTaskTemplateDraftFields([]);
+    setTaskTemplateDraftDescription("");
     setPendingTaskTemplateFocusIndex(null);
-    onNotify(normalizedFields.length ? "Task template updated." : "Task template removed.");
+    onNotify(
+      normalizedFields.length || normalizedDescription ? "Task template updated." : "Task template removed.",
+    );
   }
 
   function updateTaskTemplateFieldLabel(fieldId: string, nextLabel: string) {
@@ -988,18 +962,13 @@ export function ProjectsPage({
       onClose={() => {
         setTaskTemplateModalOpen(false);
         setTaskTemplateDraftFields([]);
+        setTaskTemplateDraftDescription("");
         setPendingTaskTemplateFocusIndex(null);
       }}
     >
       <div className="confirm-panel__content project-task-template-modal">
         <p id="project-task-template-title" className="confirm-panel__title">
           Task template
-        </p>
-        <p className="confirm-panel__copy">
-          Add project-specific fields for tasks in this project.
-        </p>
-        <p className="project-task-template-modal__hint">
-          Key is generated from the label by default.
         </p>
         <div className="project-task-template-modal__fields">
           <div className="project-task-template-modal__field-headings" aria-hidden="true">
@@ -1067,26 +1036,35 @@ export function ProjectsPage({
             </div>
           ))}
         </div>
-        <ActionBar className="project-task-template-modal__actions">
-              <button
-                type="button"
-                ref={addTemplateFieldButtonRef}
-                className="projects-board-header__button"
-                onClick={() => appendTaskTemplateField({ focusNewField: true })}
-              >
-                Add field
-              </button>
-              <button
-                type="button"
-                ref={saveTemplateButtonRef}
-                className="confirm-panel__button"
-                onClick={() => {
-                  void handleSaveTaskTemplate();
-                }}
-              >
-                Save template
-              </button>
-        </ActionBar>
+        <div className="project-task-template-modal__field-actions">
+          <button
+            type="button"
+            ref={addTemplateFieldButtonRef}
+            className="projects-board-header__button"
+            onClick={() => appendTaskTemplateField({ focusNewField: true })}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                void handleSaveTaskTemplate();
+              }
+            }}
+          >
+            Add field
+          </button>
+        </div>
+        <textarea
+          aria-label="Default task description template"
+          className="project-task-template-modal__description-textarea"
+          placeholder="Leave a trail for future you..."
+          value={taskTemplateDraftDescription}
+          onChange={(event) => setTaskTemplateDraftDescription(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+              event.preventDefault();
+              void handleSaveTaskTemplate();
+            }
+          }}
+        />
       </div>
     </Modal>
   ) : null;

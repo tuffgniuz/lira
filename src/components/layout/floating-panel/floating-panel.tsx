@@ -16,6 +16,7 @@ export function FloatingPanel({
 }: FloatingPanelProps) {
   const panelRef = useRef<HTMLElement | null>(null);
   const hasInitializedFocus = useRef(false);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const panel = panelRef.current;
@@ -25,6 +26,12 @@ export function FloatingPanel({
     }
 
     const currentPanel = panel;
+    const activeElement = document.activeElement;
+
+    previousFocusRef.current =
+      activeElement instanceof HTMLElement && !currentPanel.contains(activeElement)
+        ? activeElement
+        : null;
 
     const focusableSelectors = [
       'a[href]',
@@ -87,6 +94,22 @@ export function FloatingPanel({
 
     return () => {
       currentPanel.removeEventListener("keydown", handleKeyDown);
+
+      const previousFocus = previousFocusRef.current;
+
+      if (!previousFocus?.isConnected) {
+        previousFocusRef.current = null;
+        return;
+      }
+
+      window.requestAnimationFrame(() => {
+        if (!previousFocus.isConnected) {
+          previousFocusRef.current = null;
+          return;
+        }
+
+        previousFocus.focus();
+      });
     };
   }, [onClose]);
 

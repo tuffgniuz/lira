@@ -348,6 +348,7 @@ fn persists_project_task_templates_and_task_custom_field_values() {
         .create(Project {
             task_template: Some(ProjectTaskTemplate {
                 updated_at: "2026-03-17T08:15:00Z".into(),
+                description_template: "1. step 1\n2. step 2\n3. etc".into(),
                 fields: vec![
                     ProjectTaskTemplateField {
                         id: "field-task-id".into(),
@@ -390,6 +391,14 @@ fn persists_project_task_templates_and_task_custom_field_values() {
     assert_eq!(
         projects[0].task_template.as_ref().expect("template should exist").fields.len(),
         2
+    );
+    assert_eq!(
+        projects[0]
+            .task_template
+            .as_ref()
+            .expect("template should exist")
+            .description_template,
+        "1. step 1\n2. step 2\n3. etc"
     );
     assert_eq!(
         projects[0]

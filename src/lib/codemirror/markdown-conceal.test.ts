@@ -18,6 +18,7 @@ function renderMarkdown(doc: string) {
     state: EditorState.create({
       doc,
       extensions: [markdown(), markdownConceal()],
+      selection: { anchor: doc.length },
     }),
     parent,
   });
@@ -40,6 +41,7 @@ function renderMarkdownWithCodeLanguages(doc: string) {
         ...vimEditorHighlightExtensions,
         markdownConceal(),
       ],
+      selection: { anchor: doc.length },
     }),
     parent,
   });
@@ -64,7 +66,7 @@ describe("markdownConceal plugin", () => {
   });
 
   it("conceals completed heading markers into a compact level badge and renders list markers through widgets", () => {
-    const { parent } = renderMarkdown("### Hello\n\n- item\n1. num");
+    const { parent } = renderMarkdown("### Hello\n\n- item\n1. num\n ");
     const lines = Array.from(parent.querySelectorAll(".cm-line"));
     const headingBadge = parent.querySelector(".cm-conceal-widget--heading");
     const listWidgets = Array.from(parent.querySelectorAll(".cm-conceal-widget--list"));
@@ -78,8 +80,8 @@ describe("markdownConceal plugin", () => {
   });
 
   it("keeps heading markers visible until a space completes the markdown heading marker", () => {
-    const incomplete = renderMarkdown("##");
-    const completed = renderMarkdown("## Hello");
+    const incomplete = renderMarkdown("##\n ");
+    const completed = renderMarkdown("## Hello\n ");
 
     const incompleteLine = incomplete.parent.querySelector(".cm-line");
     const completedLine = completed.parent.querySelector(".cm-line");
@@ -92,12 +94,39 @@ describe("markdownConceal plugin", () => {
   });
 
   it("conceals fenced code markers while keeping the language info visible", () => {
-    const { parent } = renderMarkdown("```rs\nfn main() {\n}\n```");
+    const { parent } = renderMarkdown("```rs\nfn main() {\n}\n```\n ");
     const lines = Array.from(parent.querySelectorAll(".cm-line"));
 
     expect(lines[0]?.textContent).toBe("rs");
     expect(lines[0]?.innerHTML).not.toContain("```");
     expect(lines[3]?.textContent).toBe("");
+  });
+
+  it("conceals bold and italic markers", () => {
+    const { parent } = renderMarkdown("**bold** and *italic*\n ");
+    const line = parent.querySelector(".cm-line");
+
+    expect(line?.textContent).toBe("bold and italic");
+    expect(line?.innerHTML).not.toContain("**");
+    expect(line?.innerHTML).not.toContain("*");
+  });
+
+  it("conceals blockquote markers into a dedicated quote surface", () => {
+    const { parent } = renderMarkdown("> quoted text\n ");
+    const line = parent.querySelector(".cm-line");
+    const quoteWidget = parent.querySelector(".cm-conceal-widget--quote");
+
+    expect(line?.className).toContain("cm-line--quote");
+    expect(line?.textContent).toBe("quoted text");
+    expect(quoteWidget).toBeNull();
+  });
+
+  it("conceals horizontal rules and applies a dedicated line class", () => {
+    const { parent } = renderMarkdown("---\n ");
+    const line = parent.querySelector(".cm-line");
+
+    expect(line?.className).toContain("cm-line--hr");
+    expect(line?.textContent).toBe("");
   });
 
   it("marks fenced code blocks as dedicated editor surfaces", () => {

@@ -9,11 +9,11 @@ import settingsModalSource from "./components/actions/settings-modal/settings-mo
 import newTaskModalSource from "./components/actions/new-task-modal/new-task-modal.tsx?raw";
 import vimEditorMarkdownSource from "./lib/codemirror/vim-editor-markdown.ts?raw";
 import vimEditorSource from "./components/data-input/vim-editor/vim-editor.tsx?raw";
-import taskDetailPageSource from "./pages/tasks/task-detail-page.tsx?raw";
 import tasksPageSource from "./pages/tasks/tasks-page.tsx?raw";
 
 const appCss = readFileSync("src/styles/globals.css", "utf8");
 const mainSource = readFileSync("src/main.tsx", "utf8");
+const taskDetailPageSource = readFileSync("src/pages/tasks/task-detail-page.tsx", "utf8");
 
 function getCssBlock(selector: string) {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -82,11 +82,22 @@ describe("ui consistency", () => {
   });
 
   it("uses the app background for shared floating windows and elevated surfaces for palette inputs", () => {
+    const appShell = getCssBlock(".app-shell");
+    const avatarAnchor = getCssBlock(".app-shell__avatar-anchor");
     const floatingPanel = getCssBlock(".floating-panel");
     const paletteInput = getCssBlock(".palette-input");
+    const mainPanel = getCssBlock(".main-panel");
+    const mainPanelContent = getCssBlock(".main-panel__content");
 
+    expect(appShell).toContain("position: relative;");
+    expect(avatarAnchor).toContain("position: fixed;");
     expect(floatingPanel).toContain("background: var(--color-main-bg);");
     expect(paletteInput).toContain("background: var(--color-surface-elevated);");
+    expect(mainPanel).toContain("padding: 1rem;");
+    expect(mainPanelContent).toContain("box-sizing: border-box;");
+    expect(mainPanelContent).toContain("padding-top: calc(var(--main-panel-padding) + 0.5rem);");
+    expect(mainPanelContent).toContain("padding-left: calc(var(--main-panel-padding) + 1.5rem);");
+    expect(mainPanelContent).not.toContain("min-height: calc(100vh");
   });
 
   it("gives floating creation modals roomier internal padding", () => {
@@ -180,8 +191,33 @@ describe("ui consistency", () => {
 
   it("keeps project template fields in the task detail page tightly grouped", () => {
     const projectFieldStack = getCssBlock(".task-detail-page__project-field-stack");
+    const taskDetailHeaderMain = getCssBlock(".task-detail-page__header-main");
+    const taskDetailMeta = getCssBlock(".task-detail-page__meta");
+    const taskDetailTitle = getCssBlock(".task-detail-page__title");
+    const projectFieldMeta = getCssBlock(".task-detail-page__project-field-meta");
+    const projectFieldIcon = getCssBlock(".task-detail-page__project-field-icon");
+    const projectFieldInput = getCssBlock(
+      ".task-detail-page__project-form-field .ui-input,\n.task-detail-page__project-form-field .ui-select",
+    );
 
     expect(projectFieldStack).toContain("gap: 0.35rem;");
+    expect(taskDetailHeaderMain).toContain("gap: 2rem;");
+    expect(taskDetailMeta).toContain("padding-bottom: 0;");
+    expect(taskDetailTitle).toContain("padding-bottom: 0;");
+    expect(projectFieldMeta).toContain("color: var(--color-text-muted);");
+    expect(projectFieldIcon).toContain("color: var(--color-text-muted);");
+    expect(projectFieldInput).toContain("color: var(--color-text-muted);");
+    expect(taskDetailPageSource).toContain("LayersIcon");
+    expect(taskDetailPageSource).not.toContain("NoteIcon");
+  });
+
+  it("keeps the dashboard graph area as independent cards without a parent slab", () => {
+    const goalsDashboard = getCssBlock(".goals-dashboard");
+    const goalsDashboardCards = getCssBlock(".goals-dashboard__cards");
+
+    expect(goalsDashboard).toContain("background: transparent;");
+    expect(goalsDashboard).toContain("padding: 0;");
+    expect(goalsDashboardCards).toContain("gap: 0.9rem;");
   });
 
   it("keeps markdown list markers readable inside the task editor", () => {
@@ -189,6 +225,7 @@ describe("ui consistency", () => {
     const formattingListBlock = getSourceBlock(vimEditorSource, '".cm-formatting-list"');
     const concealedListBlock = getSourceBlock(vimEditorSource, '".cm-conceal-widget--list"');
     const concealedHeadingBlock = getSourceBlock(vimEditorSource, '".cm-conceal-widget--heading"');
+    const quoteLineBlock = getSourceBlock(vimEditorSource, '".cm-line--quote"');
     const codeBlockLineBlock = getSourceBlock(vimEditorSource, '".cm-line--code-block"');
     const codeBlockInfoBlock = getSourceBlock(vimEditorSource, '".cm-line--code-block-info"');
     const codeBlockBodyBlock = getSourceBlock(vimEditorSource, '".cm-line--code-block-body"');
@@ -211,6 +248,10 @@ describe("ui consistency", () => {
     expect(concealedHeadingBlock).toContain("fontWeight: 700");
     expect(concealedHeadingBlock).toContain('verticalAlign: "baseline"');
     expect(concealedHeadingBlock).toContain('transform: "translateY(-0.06em)"');
+    expect(quoteLineBlock).toContain('background: "color-mix(in srgb, var(--color-surface-elevated) 82%, transparent 18%)"');
+    expect(quoteLineBlock).toContain('borderLeft: "2px solid var(--color-accent)"');
+    expect(quoteLineBlock).toContain('borderRadius: "0.35rem"');
+    expect(vimEditorSource).not.toContain('".cm-conceal-widget--quote"');
     expect(codeBlockLineBlock).toContain('background: "color-mix(in srgb, var(--color-surface-elevated) 88%, black 12%)"');
     expect(codeBlockLineBlock).toContain('fontFamily: \'"Recursive Variable", "JetBrains Mono", monospace\'');
     expect(codeBlockInfoBlock).toContain('color: "var(--color-text-secondary)"');
@@ -259,7 +300,7 @@ describe("ui consistency", () => {
     expect(statusBar).toContain("justify-content: space-between;");
     expect(statusBar).toContain("position: fixed;");
     expect(statusBar).toContain("bottom: 1.5rem;");
-    expect(statusBar).toContain("width: min(calc(100vw - var(--layout-rail-width) - 4rem), 44rem);");
+    expect(statusBar).toContain("width: min(calc(100vw - 4rem), 44rem);");
     expect(statusBar).toContain('background: color-mix(in srgb, var(--color-surface-elevated) 72%, var(--color-main-bg) 28%);');
     expect(statusBar).toContain('font-family: "Recursive Variable", "JetBrains Mono", monospace;');
     expect(statusBar).not.toContain("border:");
@@ -300,14 +341,12 @@ describe("ui consistency", () => {
   });
 
   it("suppresses browser focus outlines on custom active controls that already have their own focus styling", () => {
-    const navButtonFocus = getCssBlock(".nav-button:focus-visible");
     const tasksFilterFocus = getCssBlock(".tasks-filter:focus-visible");
     const settingsNavButtonFocus = getCssBlock(".settings-nav__button:focus-visible");
     const themeCardFocus = getCssBlock(".theme-card:focus-visible");
     const newTaskFocus = getCssBlock(".new-task__project-choice:focus-visible");
     const newGoalFocus = getCssBlock(".new-goal__choice:focus-visible");
 
-    expect(navButtonFocus).toContain("outline: none;");
     expect(tasksFilterFocus).toContain("outline: none;");
     expect(settingsNavButtonFocus).toContain("outline: none;");
     expect(themeCardFocus).toContain("outline: none;");

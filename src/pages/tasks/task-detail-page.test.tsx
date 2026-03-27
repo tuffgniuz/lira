@@ -294,6 +294,13 @@ describe("TaskDetailPage", () => {
     expect(onDeleteTask).toHaveBeenCalledWith("task-1");
   });
 
+  it("anchors the delete action in the top-right window edge slot", () => {
+    renderTaskDetailPage();
+
+    const deleteButton = screen.getByRole("button", { name: "Delete task" });
+    expect(deleteButton.closest(".task-detail-page__window-action")).not.toBeNull();
+  });
+
   it("closes the task detail page when pressing ctrl+z followed by z", () => {
     const { onBack } = renderTaskDetailPage();
 
@@ -339,6 +346,7 @@ describe("TaskDetailPage", () => {
       projects: [
         createProject({
           taskTemplate: {
+            descriptionTemplate: "",
             updatedAt: "2026-03-21T00:00:00.000Z",
             fields: [
               {
@@ -362,6 +370,9 @@ describe("TaskDetailPage", () => {
     expect(screen.getByLabelText("Project fields")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Task ID" })).toHaveValue("TASK-41");
     expect(screen.getByRole("textbox", { name: "Stage UUID" })).toHaveValue("");
+    expect(screen.getByText("Task ID").closest(".task-detail-page__project-field-meta")).not.toBeNull();
+    expect(screen.getByText("Stage UUID").closest(".task-detail-page__project-field-meta")).not.toBeNull();
+    expect(document.querySelectorAll(".task-detail-page__project-field-icon")).toHaveLength(2);
 
     fireEvent.change(screen.getByRole("textbox", { name: "Stage UUID" }), {
       target: { value: "stage-abc-123" },
@@ -387,6 +398,7 @@ describe("TaskDetailPage", () => {
       projects: [
         createProject({
           taskTemplate: {
+            descriptionTemplate: "",
             updatedAt: "2026-03-21T00:00:00.000Z",
             fields: [
               {

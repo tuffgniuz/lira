@@ -2,11 +2,14 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ThemeProvider } from "@/theme/theme-provider";
 import { vaultPathStorageKey } from "@/app/navigation/navigation";
+import { pageSequence } from "@/app/navigation/keymappings";
 import { LiraShell } from "./lira-shell";
 import type { WorkspaceItem } from "@/models/workspace-item";
 import type { Project } from "@/models/project";
 import { defaultProjectBoardLanes } from "@/models/project-board";
 import type { Doc } from "@/models/doc";
+
+const rightRailModeStorageKey = "lira.right-rail-mode";
 
 const mocks = vi.hoisted(() => ({
   dialogOpen: vi.fn(),
@@ -161,6 +164,16 @@ function pressSequence(sequence: string[]) {
   }
 }
 
+async function goToPage(label: "Home" | "Capture Inbox" | "Goals" | "Tasks" | "Projects") {
+  pressSequence([...pageSequence]);
+  const palette = await screen.findByRole("listbox", { name: "Go To Page" });
+  fireEvent.click(within(palette).getByRole("option", { name: new RegExp(`^${label}$`, "i") }));
+}
+
+function expectPageShell(label: string) {
+  expect(document.querySelector(`.page[aria-label="${label}"]`)).not.toBeNull();
+}
+
 describe("LiraShell list shortcuts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -225,7 +238,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadProjects).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    await goToPage("Projects");
     expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
 
     pressSequence([" ", "l", "p"]);
@@ -254,6 +267,63 @@ describe("LiraShell list shortcuts", () => {
       "placeholder",
       "list inbox items",
     );
+  });
+
+  it("includes Home in the go to page palette and uses it to return to the dashboard", async () => {
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+    });
+
+    pressSequence([...pageSequence]);
+    const palette = await screen.findByRole("listbox", { name: "Go To Page" });
+    expect(within(palette).getByRole("option", { name: "Home" })).toBeInTheDocument();
+
+    await goToPage("Tasks");
+    expectPageShell("Tasks");
+
+    await goToPage("Home");
+    expectPageShell("Dashboard");
+  });
+
+  it("keeps only the avatar launcher in the top-left shell area and removes the sidebar navigation", async () => {
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+    });
+
+    expect(screen.getByRole("button", { name: "Open dashboard" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Projects" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tasks" })).not.toBeInTheDocument();
+    expect(document.querySelector(".sidebar")).toBeNull();
+  });
+
+  it("hides and pins the right rail through leader sequences while keeping dashboard rail visible", async () => {
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+      expect(mocks.loadProjects).toHaveBeenCalled();
+    });
+
+    await goToPage("Tasks");
+    expect(await screen.findByLabelText("Page insights")).toBeInTheDocument();
+
+    pressSequence([" ", "u", "h"]);
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Page insights")).not.toBeInTheDocument();
+    });
+    expect(window.localStorage.getItem(rightRailModeStorageKey)).toBe("hidden");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open dashboard" }));
+    expect(await screen.findByLabelText("Dashboard insights")).toBeInTheDocument();
+
+    await goToPage("Tasks");
+    pressSequence([" ", "u", "p"]);
+    expect(await screen.findByLabelText("Page insights")).toBeInTheDocument();
+    expect(window.localStorage.getItem(rightRailModeStorageKey)).toBe("pinned");
   });
 
   it("creates a doc from the leader new-doc sequence and opens its detail view", async () => {
@@ -339,7 +409,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadProjects).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    await goToPage("Projects");
     expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
 
     pressSequence([" ", "n", "p"]);
@@ -360,7 +430,7 @@ describe("LiraShell list shortcuts", () => {
         expect(mocks.loadProjects).toHaveBeenCalled();
       });
 
-      fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+      await goToPage("Projects");
       expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
 
       fireEvent.keyDown(window, { key: " " });
@@ -413,7 +483,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadProjects).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    await goToPage("Projects");
     expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
 
     await screen.findByRole("row", { name: /Add list task shortcut/i });
@@ -445,7 +515,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    await goToPage("Tasks");
 
     expect(await screen.findByText("Wow, such empty")).toBeInTheDocument();
     expect(screen.queryByText("Design the first task workspace layout")).not.toBeInTheDocument();
@@ -608,7 +678,7 @@ describe("LiraShell list shortcuts", () => {
 
       vi.setSystemTime(new Date("2026-03-18T12:00:00.000Z"));
 
-      fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+      await goToPage("Projects");
       expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
 
       await screen.findByRole("row", { name: /Add list task shortcut/i });
@@ -658,7 +728,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    await goToPage("Tasks");
     fireEvent.click(await screen.findByRole("button", { name: "Review task 1" }));
     fireEvent.click(await screen.findByRole("button", { name: "Delete task" }));
     fireEvent.click(await screen.findByRole("button", { name: "Confirm" }));
@@ -685,6 +755,7 @@ describe("LiraShell list shortcuts", () => {
         hasKanbanBoard: false,
         taskTemplate: {
           updatedAt: "2026-03-17T00:00:00.000Z",
+          descriptionTemplate: "1. step 1\n2. step 2\n3. etc",
           fields: [
             {
               id: "field-task-id",
@@ -712,7 +783,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    await goToPage("Projects");
     expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "n" });
@@ -735,6 +806,7 @@ describe("LiraShell list shortcuts", () => {
     expect(savedTask).toEqual(
       expect.objectContaining({
         projectId: "project-1",
+        content: "1. step 1\n2. step 2\n3. etc",
         customFieldValues: {
           task_id: "",
           stage_uuid: "",
@@ -751,6 +823,7 @@ describe("LiraShell list shortcuts", () => {
         description: "Main app",
         hasKanbanBoard: false,
         taskTemplate: {
+          descriptionTemplate: "",
           updatedAt: "2026-03-17T00:00:00.000Z",
           fields: [
             {
@@ -774,7 +847,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadProjects).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    await goToPage("Projects");
     expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit task template" }));
@@ -785,7 +858,7 @@ describe("LiraShell list shortcuts", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Field type 2" }), {
       target: { value: "boolean" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save template" }));
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Field type 2" }), { key: "Enter" });
 
     await waitFor(() => {
       expect(mocks.saveProjects).toHaveBeenCalled();
@@ -796,6 +869,7 @@ describe("LiraShell list shortcuts", () => {
     ]?.[1] as Project[];
 
     expect(latestSavedProjects[0]?.taskTemplate).toEqual({
+      descriptionTemplate: "",
       updatedAt: expect.any(String),
       fields: [
         {
@@ -823,6 +897,7 @@ describe("LiraShell list shortcuts", () => {
         description: "Main app",
         hasKanbanBoard: false,
         taskTemplate: {
+          descriptionTemplate: "",
           updatedAt: "2026-03-17T00:00:00.000Z",
           fields: [
             {
@@ -846,12 +921,12 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadProjects).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    await goToPage("Projects");
     expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit task template" }));
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save template" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Add field" }), { key: "Enter" });
 
     await waitFor(() => {
       expect(mocks.saveProjects).toHaveBeenCalled();
@@ -873,6 +948,7 @@ describe("LiraShell list shortcuts", () => {
         description: "Main app",
         hasKanbanBoard: false,
         taskTemplate: {
+          descriptionTemplate: "",
           updatedAt: "2026-03-17T00:00:00.000Z",
           fields: [
             {
@@ -897,7 +973,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadProjects).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    await goToPage("Projects");
     expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit task template" }));
@@ -905,7 +981,7 @@ describe("LiraShell list shortcuts", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Field label 2" }), {
       target: { value: "Stage UUID" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save template" }));
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Field label 2" }), { key: "Enter" });
 
     await waitFor(() => {
       expect(screen.getByRole("status")).toHaveTextContent(
@@ -922,7 +998,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    await goToPage("Projects");
     fireEvent.keyDown(window, { key: "l" });
     fireEvent.keyDown(window, { key: "n" });
 
@@ -1049,7 +1125,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
+    await goToPage("Goals");
     fireEvent.click(await screen.findByRole("button", { name: "Edit Complete 3 tasks each day" }));
 
     expect(await screen.findByRole("heading", { name: "Edit Goal" })).toBeInTheDocument();
@@ -1096,7 +1172,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
+    await goToPage("Goals");
     pressSequence([" ", "n", "g"]);
     const dialog = await screen.findByRole("dialog", { name: "New Goal" });
     fireEvent.change(within(dialog).getByLabelText("Goal sentence"), {
@@ -1166,7 +1242,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture Inbox" }));
+    await goToPage("Capture Inbox");
     fireEvent.click(
       within(await screen.findByLabelText("Inbox item actions")).getByRole("button", {
         name: "Task",
@@ -1222,7 +1298,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture Inbox" }));
+    await goToPage("Capture Inbox");
     fireEvent.click(
       within(await screen.findByLabelText("Inbox item actions")).getByRole("button", {
         name: "Task",
@@ -1258,7 +1334,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    await goToPage("Tasks");
     fireEvent.click(await screen.findByRole("button", { name: "Add list task shortcut" }));
 
     expect(await screen.findByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
@@ -1272,7 +1348,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    await goToPage("Tasks");
     fireEvent.click(await screen.findByRole("button", { name: "Add list task shortcut" }));
     expect(await screen.findByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
 
@@ -1297,7 +1373,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    await goToPage("Tasks");
     fireEvent.click(await screen.findByRole("button", { name: "Add list task shortcut" }));
     expect(await screen.findByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
 
@@ -1314,6 +1390,57 @@ describe("LiraShell list shortcuts", () => {
     editorSurface.remove();
   });
 
+  it("restores focus to the task editor after closing a floating palette", async () => {
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
+    });
+
+    await goToPage("Tasks");
+    fireEvent.click(await screen.findByRole("button", { name: "Add list task shortcut" }));
+
+    const taskEditor = await screen.findByRole("textbox", { name: "Task description" });
+    taskEditor.focus();
+    expect(document.activeElement).toBe(taskEditor);
+
+    pressSequence([" ", "l", "p"]);
+    expect(await screen.findByRole("textbox", { name: "Projects" })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(taskEditor);
+    });
+  });
+
+  it("restores focus to the doc editor after closing a floating palette", async () => {
+    mocks.loadDocs.mockResolvedValue([createDoc()]);
+
+    renderShell();
+
+    await waitFor(() => {
+      expect(mocks.loadDocs).toHaveBeenCalled();
+    });
+
+    pressSequence([" ", "l", "d"]);
+    const docsPalette = await screen.findByRole("listbox", { name: "Docs" });
+    fireEvent.click(within(docsPalette).getByRole("option", { name: /Architecture notes/i }));
+
+    const docEditor = await screen.findByRole("textbox", { name: "Doc body" });
+    docEditor.focus();
+    expect(document.activeElement).toBe(docEditor);
+
+    pressSequence([" ", "l", "p"]);
+    expect(await screen.findByRole("textbox", { name: "Projects" })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(docEditor);
+    });
+  });
+
   it("keeps task typing local and persists through the task service after a debounce", async () => {
     renderShell();
 
@@ -1321,7 +1448,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    await goToPage("Tasks");
     fireEvent.click(await screen.findByRole("button", { name: "Add list task shortcut" }));
     expect(await screen.findByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
 
@@ -1360,7 +1487,7 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    await goToPage("Tasks");
     fireEvent.click(await screen.findByRole("button", { name: "Add list task shortcut" }));
     expect(await screen.findByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
 
@@ -1388,29 +1515,29 @@ describe("LiraShell list shortcuts", () => {
     }
   });
 
-  it("navigates backward and forward through visited pages with Shift+H and Shift+L", async () => {
+  it("navigates backward and forward through visited pages with Ctrl+O and Ctrl+I", async () => {
     renderShell();
 
     await waitFor(() => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture Inbox" }));
-    expect(screen.getByRole("button", { name: "Capture Inbox" })).toHaveClass("is-active");
+    await goToPage("Capture Inbox");
+    expectPageShell("Capture Inbox");
 
-    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
+    await goToPage("Goals");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Goals" })).toHaveClass("is-active");
+      expectPageShell("Goals");
     });
 
-    fireEvent.keyDown(window, { key: "H", shiftKey: true });
+    fireEvent.keyDown(window, { key: "o", ctrlKey: true });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Capture Inbox" })).toHaveClass("is-active");
+      expectPageShell("Capture Inbox");
     });
 
-    fireEvent.keyDown(window, { key: "L", shiftKey: true });
+    fireEvent.keyDown(window, { key: "i", ctrlKey: true });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Goals" })).toHaveClass("is-active");
+      expectPageShell("Goals");
     });
   });
 
@@ -1421,26 +1548,26 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture Inbox" }));
-    fireEvent.click(screen.getByRole("button", { name: "Goals" }));
+    await goToPage("Capture Inbox");
+    await goToPage("Goals");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Goals" })).toHaveClass("is-active");
+      expectPageShell("Goals");
     });
 
-    fireEvent.keyDown(window, { key: "H", shiftKey: true });
+    fireEvent.keyDown(window, { key: "o", ctrlKey: true });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Capture Inbox" })).toHaveClass("is-active");
+      expectPageShell("Capture Inbox");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    await goToPage("Tasks");
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Tasks" })).toHaveClass("is-active");
+      expectPageShell("Tasks");
     });
 
-    fireEvent.keyDown(window, { key: "L", shiftKey: true });
+    fireEvent.keyDown(window, { key: "i", ctrlKey: true });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Tasks" })).toHaveClass("is-active");
+      expectPageShell("Tasks");
     });
   });
 
@@ -1451,17 +1578,17 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    await goToPage("Tasks");
     fireEvent.click(await screen.findByRole("button", { name: "Add list task shortcut" }));
     expect(await screen.findByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: "H", shiftKey: true });
+    fireEvent.keyDown(window, { key: "o", ctrlKey: true });
     await waitFor(() => {
       expect(screen.getByRole("columnheader", { name: "Task" })).toBeInTheDocument();
     });
     expect(screen.queryByRole("button", { name: "Back to tasks" })).not.toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: "L", shiftKey: true });
+    fireEvent.keyDown(window, { key: "i", ctrlKey: true });
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
     });
@@ -1474,28 +1601,28 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture Inbox" }));
-    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    await goToPage("Capture Inbox");
+    await goToPage("Tasks");
     fireEvent.click(await screen.findByRole("button", { name: "Add list task shortcut" }));
     expect(await screen.findByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: "H", shiftKey: true });
+    fireEvent.keyDown(window, { key: "o", ctrlKey: true });
     await waitFor(() => {
       expect(screen.getByRole("columnheader", { name: "Task" })).toBeInTheDocument();
     });
 
-    fireEvent.keyDown(window, { key: "H", shiftKey: true });
+    fireEvent.keyDown(window, { key: "o", ctrlKey: true });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Capture Inbox" })).toHaveClass("is-active");
+      expectPageShell("Capture Inbox");
     });
 
-    fireEvent.keyDown(window, { key: "L", shiftKey: true });
+    fireEvent.keyDown(window, { key: "i", ctrlKey: true });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Tasks" })).toHaveClass("is-active");
+      expectPageShell("Tasks");
       expect(screen.getByRole("columnheader", { name: "Task" })).toBeInTheDocument();
     });
 
-    fireEvent.keyDown(window, { key: "L", shiftKey: true });
+    fireEvent.keyDown(window, { key: "i", ctrlKey: true });
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
     });
@@ -1519,23 +1646,23 @@ describe("LiraShell list shortcuts", () => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    await goToPage("Projects");
     expect(await screen.findByRole("heading", { name: "Lira" })).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "Enter" });
 
     expect(await screen.findByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Projects" })).toHaveClass("is-active");
+    expect(screen.getByLabelText("Task detail")).toBeInTheDocument();
   });
 
-  it("ignores Shift+H and Shift+L when focus is inside an editor-like typing target", async () => {
+  it("ignores Ctrl+O and Ctrl+I when focus is inside an editor-like typing target", async () => {
     renderShell();
 
     await waitFor(() => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    await goToPage("Tasks");
     fireEvent.click(await screen.findByRole("button", { name: "Add list task shortcut" }));
     expect(await screen.findByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
 
@@ -1544,23 +1671,23 @@ describe("LiraShell list shortcuts", () => {
     document.body.appendChild(editorSurface);
     editorSurface.focus();
 
-    fireEvent.keyDown(editorSurface, { key: "L", shiftKey: true });
-    fireEvent.keyDown(editorSurface, { key: "H", shiftKey: true });
+    fireEvent.keyDown(editorSurface, { key: "i", ctrlKey: true });
+    fireEvent.keyDown(editorSurface, { key: "o", ctrlKey: true });
 
     expect(screen.getByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
 
     editorSurface.remove();
   });
 
-  it("allows Shift+H and Shift+L from editor-like targets when vim is in normal mode", async () => {
+  it("allows Ctrl+O and Ctrl+I from editor-like targets when vim is in normal mode", async () => {
     renderShell();
 
     await waitFor(() => {
       expect(mocks.loadWorkspaceItems).toHaveBeenCalled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture Inbox" }));
-    fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+    await goToPage("Capture Inbox");
+    await goToPage("Tasks");
     fireEvent.click(await screen.findByRole("button", { name: "Add list task shortcut" }));
     expect(await screen.findByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
 
@@ -1569,23 +1696,23 @@ describe("LiraShell list shortcuts", () => {
     editorSurface.dataset.vimMode = "normal";
     document.body.appendChild(editorSurface);
 
-    fireEvent.keyDown(editorSurface, { key: "H", shiftKey: true });
+    fireEvent.keyDown(editorSurface, { key: "o", ctrlKey: true });
     await waitFor(() => {
       expect(screen.getByRole("columnheader", { name: "Task" })).toBeInTheDocument();
     });
 
-    fireEvent.keyDown(editorSurface, { key: "H", shiftKey: true });
+    fireEvent.keyDown(editorSurface, { key: "o", ctrlKey: true });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Capture Inbox" })).toHaveClass("is-active");
+      expectPageShell("Capture Inbox");
     });
 
-    fireEvent.keyDown(editorSurface, { key: "L", shiftKey: true });
+    fireEvent.keyDown(editorSurface, { key: "i", ctrlKey: true });
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Tasks" })).toHaveClass("is-active");
+      expectPageShell("Tasks");
       expect(screen.getByRole("columnheader", { name: "Task" })).toBeInTheDocument();
     });
 
-    fireEvent.keyDown(editorSurface, { key: "L", shiftKey: true });
+    fireEvent.keyDown(editorSurface, { key: "i", ctrlKey: true });
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Add list task shortcut" })).toBeInTheDocument();
     });

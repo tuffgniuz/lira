@@ -32,6 +32,8 @@ pub struct ProjectBoardLaneDto {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectTaskTemplateDto {
     #[serde(default)]
+    pub description_template: String,
+    #[serde(default)]
     pub fields: Vec<ProjectTaskTemplateFieldDto>,
     #[serde(default)]
     pub updated_at: String,
@@ -105,6 +107,7 @@ fn default_true() -> bool {
 
 fn task_template_dto_from_model(template: ProjectTaskTemplate) -> ProjectTaskTemplateDto {
     ProjectTaskTemplateDto {
+        description_template: template.description_template,
         fields: template
             .fields
             .into_iter()
@@ -121,6 +124,7 @@ fn task_template_dto_from_model(template: ProjectTaskTemplate) -> ProjectTaskTem
 
 fn task_template_from_dto(template: ProjectTaskTemplateDto) -> ProjectTaskTemplate {
     ProjectTaskTemplate {
+        description_template: template.description_template,
         fields: template
             .fields
             .into_iter()

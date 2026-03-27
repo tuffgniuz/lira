@@ -4,7 +4,6 @@ import { CommandPalette } from "@/components/navigation/command-palette";
 import type { CommandPaletteItem } from "@/components/navigation/command-palette";
 import {
   ArrowTurnIcon,
-  BurgerIcon,
   CollapseSidebarIcon,
   LayersIcon,
   NoteIcon,
@@ -24,6 +23,7 @@ import {
   leaderKey, listGoalsSequence, listInboxItemsSequence, listProjectsSequence,
   listTasksSequence, listDocsSequence, listProjectDocsSequence, mappedSequences, newDocSequence,
   newGoalSequence, newInboxItemSequence, newProjectSequence, newTaskSequence,
+  rightRailAutoSequence, rightRailCycleSequence, rightRailHiddenSequence, rightRailPinnedSequence,
   normalizeMappedKey, pageSequence, sequenceStartsWith,
 } from "@/app/navigation/keymappings";
 
@@ -64,11 +64,18 @@ import { SettingsModal } from "@/components/actions/settings-modal";
 import { NewDocModal } from "@/components/actions/new-doc-modal/new-doc-modal";
 import { NewTaskModal } from "@/components/actions/new-task-modal";
 import { PageContent } from "./page-content";
+import type { RightRailMode } from "./page-content";
 
 const defaultProfile: UserProfile = {
   name: "User",
   profilePicture: "",
 };
+const rightRailModeStorageKey = "lira.right-rail-mode";
+const rightRailModes: RightRailMode[] = ["auto", "pinned", "hidden"];
+
+function isRightRailMode(value: string | null): value is RightRailMode {
+  return value === "auto" || value === "pinned" || value === "hidden";
+}
 
 function getTodayDateString() {
   const today = new Date();
@@ -150,6 +157,22 @@ function getInitialTaskCustomFieldValues(projects: Project[], projectId?: string
     projects.find((project) => project.id === projectId)?.taskTemplate?.fields ?? [];
 
   return Object.fromEntries(taskTemplateFields.map((field) => [field.key, ""]));
+}
+
+function getInitialTaskDescription(
+  projects: Project[],
+  projectId: string | undefined,
+  description: string,
+) {
+  if (description.trim()) {
+    return description;
+  }
+
+  if (!projectId) {
+    return description;
+  }
+
+  return projects.find((project) => project.id === projectId)?.taskTemplate?.descriptionTemplate ?? "";
 }
 
 function getDefaultProjectLaneId(projects: Project[], projectId?: string) {
@@ -238,7 +261,6 @@ export function LiraShell() {
     resetPreview,
   } = useTheme();
   const [activeView, setActiveView] = useState<ViewId>("dashboard");
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<"theme" | "profile" | "vault">(
     "theme",
@@ -281,6 +303,15 @@ export function LiraShell() {
     message: string;
     type: "inform" | "success" | "warning";
   } | null>(null);
+  const [rightRailMode, setRightRailMode] = useState<RightRailMode>(() => {
+    if (typeof window === "undefined") {
+      return "auto";
+    }
+
+    const storedMode = window.localStorage.getItem(rightRailModeStorageKey);
+
+    return isRightRailMode(storedMode) ? storedMode : "auto";
+  });
 
   const setToastMessage = useCallback(
     (message: string, type: "inform" | "success" | "warning" = "inform") => {
@@ -292,6 +323,23 @@ export function LiraShell() {
     },
     [],
   );
+
+  const applyRightRailMode = useCallback(
+    (mode: RightRailMode) => {
+      setRightRailMode(mode);
+
+      const modeLabel =
+        mode === "auto" ? "auto" : mode === "pinned" ? "pinned open" : "hidden";
+      setToastMessage(`Right rail ${modeLabel}`);
+    },
+    [setToastMessage],
+  );
+
+  const cycleRightRailMode = useCallback(() => {
+    const currentIndex = rightRailModes.indexOf(rightRailMode);
+    const nextMode = rightRailModes[(currentIndex + 1) % rightRailModes.length] ?? "auto";
+    applyRightRailMode(nextMode);
+  }, [applyRightRailMode, rightRailMode]);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [listPaletteKind, setListPaletteKind] = useState<ListPaletteKind | null>(null);
   const [commandLauncherOpen, setCommandLauncherOpen] = useState(false);
@@ -308,6 +356,8 @@ export function LiraShell() {
   const projectMutationVersionRef = useRef(0);
   const taskSaveRequestVersionRef = useRef(new Map<string, number>());
   const docSaveRequestVersionRef = useRef(new Map<string, number>());
+  const mainPanelContentRef = useRef<HTMLDivElement | null>(null);
+  const lastMainPanelFocusRef = useRef<HTMLElement | null>(null);
   const pageHistoryRef = useRef<NavigationLocation[]>([
     {
       view: "dashboard",
@@ -319,12 +369,20 @@ export function LiraShell() {
   ]);
   const pageHistoryIndexRef = useRef(0);
 
-  const pageItems: CommandPaletteItem[] = navigationItems.map((item) => ({
-    id: item.id,
-    label: item.label,
-    keywords: [item.id.replace("_", " "), item.label.toLowerCase()],
-    icon: <item.icon className="nav-icon" />,
-  }));
+  const pageItems: CommandPaletteItem[] = [
+    {
+      id: "dashboard",
+      label: "Home",
+      keywords: ["home", "dashboard", "start"],
+      icon: <SparkIcon className="nav-icon" />,
+    },
+    ...navigationItems.map((item) => ({
+      id: item.id,
+      label: item.label,
+      keywords: [item.id.replace("_", " "), item.label.toLowerCase()],
+      icon: <item.icon className="nav-icon" />,
+    })),
+  ];
   const projectItems: CommandPaletteItem[] = projects.map((project) => ({
     id: project.id,
     label: project.name,
@@ -478,6 +536,30 @@ export function LiraShell() {
       keywords: ["preferences", "theme", "config"],
       icon: <SettingsIcon className="nav-icon" />,
     },
+    {
+      id: "right-rail-cycle",
+      label: "Right rail cycle mode",
+      keywords: ["right rail", "rail", "panel", "cycle", "toggle"],
+      icon: <CollapseSidebarIcon className="nav-icon" />,
+    },
+    {
+      id: "right-rail-pin",
+      label: "Right rail pin",
+      keywords: ["right rail", "rail", "panel", "pin", "show"],
+      icon: <CollapseSidebarIcon className="nav-icon" />,
+    },
+    {
+      id: "right-rail-hide",
+      label: "Right rail hide",
+      keywords: ["right rail", "rail", "panel", "hide"],
+      icon: <CollapseSidebarIcon className="nav-icon" />,
+    },
+    {
+      id: "right-rail-auto",
+      label: "Right rail auto",
+      keywords: ["right rail", "rail", "panel", "auto", "responsive"],
+      icon: <CollapseSidebarIcon className="nav-icon" />,
+    },
   ];
 
   async function mutateItems(
@@ -565,6 +647,43 @@ export function LiraShell() {
     }
   }
 
+  function rememberMainPanelFocus() {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const activeElement = document.activeElement;
+    const mainPanelContent = mainPanelContentRef.current;
+
+    if (!(activeElement instanceof HTMLElement) || !mainPanelContent?.contains(activeElement)) {
+      return;
+    }
+
+    lastMainPanelFocusRef.current = activeElement;
+  }
+
+  function restoreMainPanelFocus() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const focusTarget = lastMainPanelFocusRef.current;
+
+    if (!focusTarget?.isConnected) {
+      lastMainPanelFocusRef.current = null;
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      if (!focusTarget.isConnected) {
+        lastMainPanelFocusRef.current = null;
+        return;
+      }
+
+      focusTarget.focus();
+    });
+  }
+
   useEffect(() => {
     if (!projects.length) {
       setSelectedProjectId("");
@@ -593,15 +712,16 @@ export function LiraShell() {
   }, [toastNotification]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(rightRailModeStorageKey, rightRailMode);
+  }, [rightRailMode]);
+
+  useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       const typingTarget = isTypingTarget(event.target);
-
-      if (event.ctrlKey && event.code === "Backquote") {
-        event.preventDefault();
-        setSidebarExpanded((current) => !current);
-        clearKeySequence();
-        return;
-      }
 
       if (event.key === "Escape" && settingsOpen) {
         event.preventDefault();
@@ -611,57 +731,56 @@ export function LiraShell() {
 
       if (event.key === "Escape" && commandPaletteOpen) {
         event.preventDefault();
-        setCommandPaletteOpen(false);
+        closeCommandPalette();
         clearKeySequence();
         return;
       }
 
       if (event.key === "Escape" && commandLauncherOpen) {
         event.preventDefault();
-        setCommandLauncherOpen(false);
+        closeCommandLauncher();
         clearKeySequence();
         return;
       }
 
       if (event.key === "Escape" && listPaletteKind) {
         event.preventDefault();
-        setListPaletteKind(null);
+        closeListPalette();
         clearKeySequence();
         return;
       }
 
       if (event.key === "Escape" && quickCaptureOpen) {
         event.preventDefault();
-        setQuickCaptureOpen(false);
+        closeQuickCapture();
         clearKeySequence();
         return;
       }
 
       if (event.key === "Escape" && newGoalOpen) {
         event.preventDefault();
-        setNewGoalOpen(false);
-        setEditingGoalId("");
+        closeNewGoal();
         clearKeySequence();
         return;
       }
 
       if (event.key === "Escape" && newTaskOpen) {
         event.preventDefault();
-        setNewTaskOpen(false);
+        closeNewTask();
         clearKeySequence();
         return;
       }
 
       if (event.key === "Escape" && newDocOpen) {
         event.preventDefault();
-        setNewDocOpen(false);
+        closeNewDoc();
         clearKeySequence();
         return;
       }
 
       if (event.key === "Escape" && newProjectOpen) {
         event.preventDefault();
-        setNewProjectOpen(false);
+        closeNewProject();
         clearKeySequence();
         return;
       }
@@ -705,19 +824,21 @@ export function LiraShell() {
 
       if (
         !keySequenceRef.current.length &&
-        event.shiftKey &&
+        event.ctrlKey &&
         !event.metaKey &&
-        !event.ctrlKey &&
-        !event.altKey
+        !event.altKey &&
+        !event.shiftKey
       ) {
-        if (event.key === "H") {
+        const loweredKey = event.key.toLowerCase();
+
+        if (loweredKey === "o") {
           event.preventDefault();
           navigatePageHistory(-1);
           clearKeySequence();
           return;
         }
 
-        if (event.key === "L") {
+        if (loweredKey === "i") {
           event.preventDefault();
           navigatePageHistory(1);
           clearKeySequence();
@@ -727,7 +848,7 @@ export function LiraShell() {
 
       if (event.key === ":") {
         event.preventDefault();
-        setCommandLauncherOpen(true);
+        openCommandLauncher();
         clearKeySequence();
         return;
       }
@@ -765,7 +886,7 @@ export function LiraShell() {
 
       if (nextSequence.join("") === pageSequence.join("")) {
         event.preventDefault();
-        setCommandPaletteOpen(true);
+        openCommandPalette();
         clearKeySequence();
         return;
       }
@@ -848,36 +969,63 @@ export function LiraShell() {
 
       if (nextSequence.join("") === newInboxItemSequence.join("")) {
         event.preventDefault();
-        setQuickCaptureOpen(true);
+        openQuickCapture();
         clearKeySequence();
         return;
       }
 
       if (nextSequence.join("") === newGoalSequence.join("")) {
         event.preventDefault();
-        setEditingGoalId("");
-        setNewGoalOpen(true);
+        openNewGoal();
         clearKeySequence();
         return;
       }
 
       if (nextSequence.join("") === newTaskSequence.join("")) {
         event.preventDefault();
-        setNewTaskOpen(true);
+        openNewTask();
         clearKeySequence();
         return;
       }
 
       if (nextSequence.join("") === newDocSequence.join("")) {
         event.preventDefault();
-        setNewDocOpen(true);
+        openNewDoc();
         clearKeySequence();
         return;
       }
 
       if (nextSequence.join("") === newProjectSequence.join("")) {
         event.preventDefault();
-        setNewProjectOpen(true);
+        openNewProject();
+        clearKeySequence();
+        return;
+      }
+
+      if (nextSequence.join("") === rightRailCycleSequence.join("")) {
+        event.preventDefault();
+        cycleRightRailMode();
+        clearKeySequence();
+        return;
+      }
+
+      if (nextSequence.join("") === rightRailPinnedSequence.join("")) {
+        event.preventDefault();
+        applyRightRailMode("pinned");
+        clearKeySequence();
+        return;
+      }
+
+      if (nextSequence.join("") === rightRailHiddenSequence.join("")) {
+        event.preventDefault();
+        applyRightRailMode("hidden");
+        clearKeySequence();
+        return;
+      }
+
+      if (nextSequence.join("") === rightRailAutoSequence.join("")) {
+        event.preventDefault();
+        applyRightRailMode("auto");
         clearKeySequence();
         return;
       }
@@ -907,9 +1055,12 @@ export function LiraShell() {
     newTaskOpen,
     projects.length,
     quickCaptureOpen,
+    rightRailMode,
     selectedGoalId,
     selectedTaskId,
     settingsOpen,
+    applyRightRailMode,
+    cycleRightRailMode,
   ]);
 
   useEffect(() => {
@@ -1227,6 +1378,83 @@ export function LiraShell() {
     navigateToPage("inbox");
   }
 
+  function openCommandPalette() {
+    rememberMainPanelFocus();
+    setCommandPaletteOpen(true);
+  }
+
+  function closeCommandPalette() {
+    setCommandPaletteOpen(false);
+    restoreMainPanelFocus();
+  }
+
+  function openCommandLauncher() {
+    rememberMainPanelFocus();
+    setCommandLauncherOpen(true);
+  }
+
+  function closeCommandLauncher() {
+    setCommandLauncherOpen(false);
+    restoreMainPanelFocus();
+  }
+
+  function closeListPalette() {
+    setListPaletteKind(null);
+    restoreMainPanelFocus();
+  }
+
+  function openQuickCapture() {
+    rememberMainPanelFocus();
+    setQuickCaptureOpen(true);
+  }
+
+  function closeQuickCapture() {
+    setQuickCaptureOpen(false);
+    restoreMainPanelFocus();
+  }
+
+  function openNewGoal(goalId = "") {
+    rememberMainPanelFocus();
+    setEditingGoalId(goalId);
+    setNewGoalOpen(true);
+  }
+
+  function closeNewGoal() {
+    setNewGoalOpen(false);
+    setEditingGoalId("");
+    restoreMainPanelFocus();
+  }
+
+  function openNewTask() {
+    rememberMainPanelFocus();
+    setNewTaskOpen(true);
+  }
+
+  function closeNewTask() {
+    setNewTaskOpen(false);
+    restoreMainPanelFocus();
+  }
+
+  function openNewDoc() {
+    rememberMainPanelFocus();
+    setNewDocOpen(true);
+  }
+
+  function closeNewDoc() {
+    setNewDocOpen(false);
+    restoreMainPanelFocus();
+  }
+
+  function openNewProject() {
+    rememberMainPanelFocus();
+    setNewProjectOpen(true);
+  }
+
+  function closeNewProject() {
+    setNewProjectOpen(false);
+    restoreMainPanelFocus();
+  }
+
   function openTaskDetailInView(taskId: string, view: "tasks" | "projects") {
     navigateToLocation(
       buildNavigationLocation({
@@ -1276,6 +1504,8 @@ export function LiraShell() {
   }
 
   function openListPalette(kind: ListPaletteKind) {
+    rememberMainPanelFocus();
+
     if ((kind === "docs" || kind === "project-docs") && loadedDocVaultPath !== vaultPath) {
       setListPaletteKind(kind);
       return;
@@ -1301,6 +1531,7 @@ export function LiraShell() {
   }
 
   function openSettings() {
+    rememberMainPanelFocus();
     setPendingThemeId(activeThemeId);
     setPendingAccentToken(activeAccentToken);
     setPendingProfileName(profile.name);
@@ -1319,6 +1550,7 @@ export function LiraShell() {
     setPendingVaultPath(vaultPath);
     setVaultError("");
     setSettingsOpen(false);
+    restoreMainPanelFocus();
   }
 
   function handleThemePreview(themeId: string) {
@@ -1358,6 +1590,7 @@ export function LiraShell() {
       window.localStorage.removeItem(vaultPathStorageKey);
       setProfile(nextProfile);
       setSettingsOpen(false);
+      restoreMainPanelFocus();
       return;
     }
 
@@ -1372,6 +1605,7 @@ export function LiraShell() {
     window.localStorage.setItem(vaultPathStorageKey, resolvedVaultPath);
     setProfile(nextProfile);
     setSettingsOpen(false);
+    restoreMainPanelFocus();
   }
 
   async function handleBrowseVault() {
@@ -1482,7 +1716,7 @@ export function LiraShell() {
       state: "active",
       sourceType: "manual",
       title: task.title,
-      content: task.description,
+      content: getInitialTaskDescription(projects, task.projectId || undefined, task.description),
       createdAt: timestamp,
       updatedAt: timestamp,
       tags: [],
@@ -1651,8 +1885,7 @@ export function LiraShell() {
   }
 
   function handleOpenEditGoal(goalId: string) {
-    setEditingGoalId(goalId);
-    setNewGoalOpen(true);
+    openNewGoal(goalId);
   }
 
   function handleEditGoal(goal: {
@@ -1942,7 +2175,7 @@ export function LiraShell() {
           state: "active",
           sourceType: "capture",
           title: capture.title,
-          content: capture.content,
+          content: getInitialTaskDescription(projects, nextProjectId, capture.content),
           createdAt: timestamp,
           updatedAt: timestamp,
           tags: capture.tags,
@@ -2152,97 +2385,54 @@ export function LiraShell() {
 
     if (item.id === "settings") {
       openSettings();
+      return;
+    }
+
+    if (item.id === "right-rail-cycle") {
+      cycleRightRailMode();
+      return;
+    }
+
+    if (item.id === "right-rail-pin") {
+      applyRightRailMode("pinned");
+      return;
+    }
+
+    if (item.id === "right-rail-hide") {
+      applyRightRailMode("hidden");
+      return;
+    }
+
+    if (item.id === "right-rail-auto") {
+      applyRightRailMode("auto");
     }
   }
 
   return (
     <>
       <div className="app-shell">
-        <aside className={`sidebar ${sidebarExpanded ? "is-expanded" : "is-collapsed"}`}>
-          <div className="sidebar__header">
-            <button
-              type="button"
-              className="sidebar__brand"
-              onClick={() => navigateToPage("dashboard")}
-              aria-label="Open dashboard"
-              title="Dashboard"
-            >
-              <span className="sidebar__avatar" aria-hidden="true">
-                {profile.profilePicture ? (
-                  <img
-                    src={profile.profilePicture}
-                    alt=""
-                    className="sidebar__avatar-image"
-                  />
-                ) : (
-                  (profile.name.trim() || defaultProfile.name).slice(0, 1).toUpperCase()
-                )}
-              </span>
-              <span className="sidebar__brand-copy">
-                <span className="sidebar__brand-name">
-                  {(profile.name.trim() || defaultProfile.name).replace(/'$/, "")}
-                  &apos;s Lira
-                </span>
-              </span>
-            </button>
-
-            <button
-              type="button"
-              className="sidebar__toggle"
-              onClick={() => setSidebarExpanded((current) => !current)}
-              aria-label={sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
-              aria-pressed={sidebarExpanded}
-            >
-              {sidebarExpanded ? (
-                <CollapseSidebarIcon className="nav-icon" />
-              ) : (
-                <BurgerIcon className="nav-icon" />
-              )}
-            </button>
-          </div>
-
-          <div className="sidebar__section sidebar__section--primary">
-            <nav className="nav-list" aria-label="Primary navigation">
-              {navigationItems.map((item) => {
-                const Icon = item.icon;
-
-                return (
-              <button
-                    key={item.id}
-                    type="button"
-                    className={`nav-button ${activeView === item.id ? "is-active" : ""}`}
-                    onClick={() =>
-                      navigateToPage(item.id, {
-                        clearTaskSelection: item.id === "tasks",
-                      })
-                    }
-                    aria-label={item.label}
-                    title={item.label}
-                  >
-                    <Icon className="nav-icon" />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-
-          <div className="sidebar__section sidebar__section--settings">
-            <button
-              type="button"
-              className="nav-button"
-              onClick={openSettings}
-              aria-label="Settings"
-              title="Settings"
-            >
-              <SettingsIcon className="nav-icon" />
-              <span>Settings</span>
-            </button>
-          </div>
-        </aside>
+        <button
+          type="button"
+          className="app-shell__avatar-anchor"
+          onClick={() => navigateToPage("dashboard")}
+          aria-label="Open dashboard"
+          title="Dashboard"
+        >
+          <span className="app-shell__avatar" aria-hidden="true">
+            {profile.profilePicture ? (
+              <img
+                src={profile.profilePicture}
+                alt=""
+                className="app-shell__avatar-image"
+              />
+            ) : (
+              (profile.name.trim() || defaultProfile.name).slice(0, 1).toUpperCase()
+            )}
+          </span>
+        </button>
 
         <main className="main-panel">
-          <div className="main-panel__content">
+          <div ref={mainPanelContentRef} className="main-panel__content">
             <PageContent
               activeView={activeView}
               items={items}
@@ -2273,6 +2463,8 @@ export function LiraShell() {
               onUpdateCaptureState={handleUpdateCaptureState}
               onDeleteCapture={handleDeleteItem}
               onNotify={setToastMessage}
+              onOpenGoalFromDashboard={navigateToGoal}
+              rightRailMode={rightRailMode}
               taskDraftResetKeys={taskDraftResetKeys}
               docDraftResetKeys={docDraftResetKeys}
             />
@@ -2332,7 +2524,7 @@ export function LiraShell() {
         items={pageItems}
         isOpen={commandPaletteOpen}
         emptyMessage="No pages match that query."
-        onClose={() => setCommandPaletteOpen(false)}
+        onClose={closeCommandPalette}
         onSelect={handleSelectPage}
       />
 
@@ -2342,7 +2534,7 @@ export function LiraShell() {
         items={listPaletteConfig?.items ?? []}
         isOpen={listPaletteKind !== null}
         emptyMessage={listPaletteConfig?.emptyMessage ?? "No items match that query."}
-        onClose={() => setListPaletteKind(null)}
+        onClose={closeListPalette}
         onSelect={handleSelectListItem}
       />
 
@@ -2352,21 +2544,19 @@ export function LiraShell() {
         items={commandItems}
         isOpen={commandLauncherOpen}
         emptyMessage="No commands match that query."
-        onClose={() => setCommandLauncherOpen(false)}
+        onClose={closeCommandLauncher}
         onSelect={handleSelectCommand}
       />
 
       <QuickCaptureModal
         isOpen={quickCaptureOpen}
-        onClose={() => setQuickCaptureOpen(false)}
+        onClose={closeQuickCapture}
         onSubmit={handleCaptureThought}
       />
 
       <NewTaskModal
         isOpen={newTaskOpen}
-        onClose={() => {
-          setNewTaskOpen(false);
-        }}
+        onClose={closeNewTask}
         goals={items
           .filter(
             (item) =>
@@ -2385,17 +2575,14 @@ export function LiraShell() {
 
       <NewDocModal
         isOpen={newDocOpen}
-        onClose={() => setNewDocOpen(false)}
+        onClose={closeNewDoc}
         projects={projects}
         onSubmit={handleCreateDoc}
       />
 
       <NewGoalModal
         isOpen={newGoalOpen}
-        onClose={() => {
-          setNewGoalOpen(false);
-          setEditingGoalId("");
-        }}
+        onClose={closeNewGoal}
         projects={projects}
         initialGoal={
           editingGoalId
@@ -2426,7 +2613,7 @@ export function LiraShell() {
 
       <NewProjectModal
         isOpen={newProjectOpen}
-        onClose={() => setNewProjectOpen(false)}
+        onClose={closeNewProject}
         onSubmit={handleCreateProject}
       />
     </>

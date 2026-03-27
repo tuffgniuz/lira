@@ -12,6 +12,10 @@ export const newGoalSequence = [leaderKey, "n", "g"] as const;
 export const newTaskSequence = [leaderKey, "n", "t"] as const;
 export const newProjectSequence = [leaderKey, "n", "p"] as const;
 export const newDocSequence = [leaderKey, "n", "d"] as const;
+export const rightRailCycleSequence = [leaderKey, "u", "r"] as const;
+export const rightRailPinnedSequence = [leaderKey, "u", "p"] as const;
+export const rightRailHiddenSequence = [leaderKey, "u", "h"] as const;
+export const rightRailAutoSequence = [leaderKey, "u", "a"] as const;
 
 export const mappedSequences = [
   pageSequence,
@@ -26,6 +30,10 @@ export const mappedSequences = [
   newTaskSequence,
   newProjectSequence,
   newDocSequence,
+  rightRailCycleSequence,
+  rightRailPinnedSequence,
+  rightRailHiddenSequence,
+  rightRailAutoSequence,
 ] as const;
 
 export function normalizeMappedKey(key: string) {

@@ -4,6 +4,38 @@ import { ProjectsPage } from "./projects-page";
 import type { Item } from "@/models/workspace-item";
 import type { Project } from "@/models/project";
 
+vi.mock("@uiw/react-codemirror", () => ({
+  default: ({
+    value,
+    onChange,
+    "aria-label": ariaLabel,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    "aria-label": string;
+  }) => (
+    <textarea
+      aria-label={ariaLabel}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  ),
+}));
+
+vi.mock("@replit/codemirror-vim", () => ({
+  Vim: {
+    defineEx: vi.fn(),
+    map: vi.fn(),
+    handleKey: vi.fn(),
+  },
+  getCM: vi.fn(() => ({
+    state: { vim: { insertMode: true } },
+    on: vi.fn(),
+    off: vi.fn(),
+  })),
+  vim: vi.fn(() => ({ name: "vim-extension" })),
+}));
+
 function createProject(overrides: Partial<Project> = {}): Project {
   return {
     id: "project-1",
@@ -72,6 +104,7 @@ function renderProjectsPage({
       projects={projects}
       items={items}
       todayDate={todayDate}
+      rightRailMode="auto"
       selectedProjectId="project-1"
       onUpdateProject={onUpdateProject}
       onUpdateTask={onUpdateTask}
@@ -146,7 +179,7 @@ describe("ProjectsPage board", () => {
     expect(within(doneLane).queryByRole("article")).not.toBeInTheDocument();
     expect(screen.queryByText("Other project task")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Goals" })).toBeInTheDocument();
-    expect(screen.getByText("Complete 3 tasks")).toBeInTheDocument();
+    expect(screen.getAllByText("Complete 3 tasks").length).toBeGreaterThan(0);
   });
 
   it("opens the task template modal with Shift+T on the projects page", () => {
@@ -303,14 +336,18 @@ describe("ProjectsPage board", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Field type 2" }), {
       target: { value: "boolean" },
     });
+    fireEvent.change(screen.getByRole("textbox", { name: "Default task description template" }), {
+      target: { value: "1. step 1\n2. step 2\n3. etc" },
+    });
 
-    fireEvent.click(screen.getByRole("button", { name: "Save template" }));
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Field type 2" }), { key: "Enter" });
 
     expect(onUpdateProject).toHaveBeenCalledWith(
       "project-1",
       expect.objectContaining({
         taskTemplate: {
           updatedAt: expect.any(String),
+          descriptionTemplate: "1. step 1\n2. step 2\n3. etc",
           fields: [
             {
               id: expect.any(String),
@@ -328,6 +365,25 @@ describe("ProjectsPage board", () => {
         },
       }),
     );
+  });
+
+  it("renders a vim editor for the default task description template", () => {
+    renderProjectsPage({
+      projects: [
+        createProject({
+          hasKanbanBoard: false,
+          boardLanes: [],
+        } as Partial<Project>),
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create task template" }));
+
+    expect(
+      screen.getByRole("textbox", { name: "Default task description template" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Default task description")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Editor status")).not.toBeInTheDocument();
   });
 
   it("auto-generates field keys from labels without showing a key field", () => {
@@ -348,7 +404,7 @@ describe("ProjectsPage board", () => {
     fireEvent.change(labelInput, { target: { value: "Task ID" } });
     expect(screen.queryByRole("textbox", { name: "Field key 1" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Save template" }));
+    fireEvent.keyDown(labelInput, { key: "Enter" });
 
     expect(onUpdateProject).toHaveBeenCalledWith(
       "project-1",
@@ -377,7 +433,10 @@ describe("ProjectsPage board", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Create task template" }));
 
-    expect(screen.getByText("Key is generated from the label by default.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Add project-specific fields for tasks in this project."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Key is generated from the label by default.")).not.toBeInTheDocument();
     expect(screen.getByText("Label")).toBeInTheDocument();
     expect(screen.getByText("Type")).toBeInTheDocument();
     expect(screen.getByText("Action")).toBeInTheDocument();
@@ -469,8 +528,6 @@ describe("ProjectsPage board", () => {
     const labelInput = screen.getByRole("textbox", { name: "Field label 1" });
     labelInput.focus();
     fireEvent.change(labelInput, { target: { value: "Task ID" } });
-    fireEvent.keyDown(labelInput, { key: "Enter" });
-    expect(screen.getByRole("combobox", { name: "Field type 1" })).toHaveFocus();
 
     const typeSelect = screen.getByRole("combobox", { name: "Field type 1" });
     fireEvent.change(typeSelect, { target: { value: "number" } });
@@ -487,13 +544,13 @@ describe("ProjectsPage board", () => {
 
     fireEvent.keyDown(screen.getByRole("combobox", { name: "Field type 2" }), {
       key: "Enter",
-      ctrlKey: true,
     });
 
     expect(onUpdateProject).toHaveBeenCalledWith(
       "project-1",
       expect.objectContaining({
         taskTemplate: {
+          descriptionTemplate: "",
           updatedAt: expect.any(String),
           fields: [
             expect.objectContaining({

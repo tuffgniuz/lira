@@ -74,6 +74,46 @@ export function RightRailColumn({
           </div>
         </section>
       ) : null}
+
+      {context.streaks.length > 0 ? (
+        <section className="right-rail__section">
+          <div className="right-rail__heading-row">
+            <h2 className="right-rail__heading">Streaks</h2>
+          </div>
+          <div className="right-rail__streaks">
+            {context.streaks.map((streak) => (
+              <div key={streak.goalId} className="right-rail__streak-item">
+                <p className="right-rail__streak-title" title={streak.goalTitle}>
+                  {streak.goalTitle}
+                </p>
+                <p className="right-rail__streak-values">
+                  <span>{streak.currentStreakDays}d</span>
+                  <span className="right-rail__streak-best">Best {streak.bestStreakDays}d</span>
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="right-rail__section">
+        <div className="right-rail__heading-row">
+          <h2 className="right-rail__heading">Consistency</h2>
+        </div>
+        <div className="right-rail__consistency">
+          <p className="right-rail__consistency-score">{context.consistency.score} / 100</p>
+          <p className="right-rail__consistency-label">This week</p>
+          <div className="right-rail__consistency-breakdown">
+            <span>Met {context.consistency.metDays}</span>
+            <span>Missed {context.consistency.missedDays}</span>
+            <span>Off {context.consistency.offDays}</span>
+          </div>
+          <p className="right-rail__consistency-delta">
+            {context.consistency.deltaFromPreviousWeek >= 0 ? "+" : ""}
+            {context.consistency.deltaFromPreviousWeek} vs last week
+          </p>
+        </div>
+      </section>
     </div>
   );
 }
